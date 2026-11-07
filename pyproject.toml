@@ -27,6 +27,7 @@ packages = ["src/bellhaven_sync"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 markers = ["e2e: drives a real browser against the review app"]
 addopts = "-m 'not e2e'"
 
