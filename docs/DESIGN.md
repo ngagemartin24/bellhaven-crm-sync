@@ -14,6 +14,29 @@ run never re-asks a decided question.
 
 The deliverable is the corrected CRM copy plus the system that produced it.
 
+## Clarifications
+
+### Session 2026-11-07
+
+Clarify pass on v2: no open question needed the candidate; six assumptions settled by the builder, each
+applied in the section named.
+
+- Assumed: each card kind has one section. Change of ownership: every card whose old account keeps billing
+  and gets only `chow_current_account`, including a sold facility not on the website (Sandusky). Duplicates:
+  every duplicate card, including a sold facility without billing (8.6). Wrong parent: an ownership/name card
+  that changes `parent_id`, even if it also renames. Renames: an ownership/name card that changes only the
+  name or status. Gone from the website: Needs Review cards (8.1).
+- Assumed: a new account's care type is the site's first listed offering, mapped (8.5).
+- Assumed: an operator account not on the website that is already Inactive gets no card; a person has already
+  retired it (8.6).
+- Assumed: the first real writes, off camera, are the Grove City rename (one PATCH) and the Batavia new account
+  with its administrator (two POSTs); `parent_name` is derived by the CRM from `parent_id` and never written
+  (12).
+- Assumed: after the review, the pipeline runs once more against the real CRM and must propose zero cards;
+  that output goes in the writeup next to the verifier's (17).
+- Assumed: in a group of alternatives, the reviewer rejects the look-alike before approving the new account,
+  so the rejection is his own click on camera; either order ends in the same CRM state (10.6, 18).
+
 ## 2. Success criteria
 
 - **SC-1** Every website location ends in its expected state (section 9), read back by `scripts/verify.py`,
@@ -188,6 +211,10 @@ one account created for one location, or one relation set (duplicate, successor)
 **change key** (10.2). A **card** groups the changes a reviewer judges together and shows before → after,
 the evidence and the ordered write steps. Sections, in order (F1): Change of ownership · Duplicates ·
 Wrong parent · New accounts · Gone from the website · Possible matches · Renames · Details · Needs attention.
+Each card kind has exactly one section: a card that sets only `chow_current_account` on a billing account is
+Change of ownership (including Sandusky, 8.6); a duplicate card is Duplicates (including a sold facility
+without billing, 8.6); an ownership/name card that changes `parent_id` is Wrong parent even when it also
+renames; one that changes only name or status is Renames; a Needs Review card is Gone from the website.
 
 ### 8.2 One matched account
 
@@ -219,8 +246,8 @@ site's exact name (C4); **status** ≠ Active.
 
 ### 8.5 A location with no match
 
-- **New account card:** create from the site's values (name, street, city, state, ZIP, phone, mapped care
-  type) under the operator's parent, Active, with a note naming the source page and date, plus the site's
+- **New account card:** create from the site's values (name, street, city, state, ZIP, phone, and the care
+  type mapped from the site's first listed offering) under the operator's parent, Active, with a note naming the source page and date, plus the site's
   administrator as a contact (title Administrator, the site's phone, no invented email).
 - When Low candidates exist (C3), each becomes a **Possible match** card ("this is the same facility": its
   ownership/name and details changes). The New account card and its Possible-match cards form one
@@ -229,7 +256,8 @@ site's exact name (C4); **status** ≠ Active.
 ### 8.6 Operator accounts not on the website (D4, D6, E3, F14)
 
 Only built from a complete run, and only approvable while the latest run is complete (SC-6). For each
-eligible operator child left unmatched:
+eligible operator child left unmatched and not already Inactive (an Inactive one was retired by a person and
+gets no card):
 - **An eligible account under a different parent at the same full address with a compatible care type:**
   the facility was sold. If `needs_chow`: set only `chow_current_account` on the old account to that
   account, and append a note on the successor. Otherwise: the old copy becomes a duplicate of it
@@ -400,8 +428,11 @@ banner and sort first in their section. The blind model check (17.1) uses this.
   `GET/PATCH /contacts/{id}`. No delete, no merge.
 - The published API description gives no request-body shape. Field names are taken from the GET responses.
   No probe requests are sent. The first real writes are ordinary approved cards made **off camera before
-  recording**: one rename (a PATCH) and one new account with its administrator (two POSTs), each checked in
-  the CRM browser; what they show goes into `docs/api-notes.md`.
+  recording**: the Grove City rename (one PATCH) and the Batavia new account with its administrator (two
+  POSTs), each checked in the CRM browser; what they show goes into `docs/api-notes.md`.
+- `parent_name` is derived by the CRM from `parent_id`; the system never writes it and the first PATCH
+  confirms it follows. Records the system creates come back with `created_by_candidate = true` (every
+  record in today's snapshot is false), which reconciliation (11 step 4) relies on.
 - Status values: Active, Inactive, Needs Review. Page size ≤ 200. Bearer key on every request.
 - Only an idempotent PATCH is retried after a connection error, inside one Approve or Retry click.
 
@@ -462,7 +493,8 @@ pytest against an in-memory fake CRM loaded from `tests/fixtures/snapshot/`; the
   Akron, Defiance and Meadville get no parent or CHOW change; Sandusky points at 63BVK3 and nothing else.
 - `test_rerun`: after the end-state run, a second run proposes nothing; after rejections, nothing returns;
   a rejected two-field card whose street is fixed elsewhere does not return as a phone-only card.
-- `test_guard`: an incomplete run builds no gone cards, supersedes nothing, and blocks an existing gone card.
+- `test_guard`: an incomplete run builds no gone cards, supersedes nothing, and blocks an existing gone card;
+  an operator account not on the website that is already Inactive gets no card.
 - `test_apply`: a failure at step 2 of 3 shows "1 of 3", Retry finishes without a second create; a lost
   POST response becomes needs-reconciliation and is adopted, never re-POSTed; Lima gaining AR before
   approval makes its card stale; Batavia created elsewhere makes its New account card stale; a half-done
@@ -484,6 +516,8 @@ pytest against an in-memory fake CRM loaded from `tests/fixtures/snapshot/`; the
 4. **Gage clicks every card**, flagged ones first (H1).
 5. **`scripts/verify.py`** reads every account and contact and prints PASS/FAIL per row of section 9 plus the
    unchanged-everything-else invariants (8.10). Its output goes in the writeup.
+6. **Second run on the real CRM:** `bellhaven-sync run` once more; it must propose zero cards. The run banner
+   goes in the writeup beside the verifier's output, as the proof that re-runs are safe.
 
 ## 18. Deliverables
 
@@ -509,7 +543,7 @@ pytest against an in-memory fake CRM loaded from `tests/fixtures/snapshot/`; the
 | When | Who | What |
 |---|---|---|
 | 2026-11-07 evening | agents | Plan, build, tests, blind check, code review |
-| When the build is verified | Gage, ~45 min | Off-camera first writes; read the flags; record the video; click the 42 cards; verifier |
+| When the build is verified | Gage, ~45 min | Off-camera first writes; read the flags; record the video; click the 42 cards; verifier; second run proposes zero |
 | Next | Gage, ~30 min | Edit the writeup; repo public; upload video; submit the form |
 | 2026-11-09T19:30Z | | Deadline (48 hours from his first read) |
 | Before the interview | Gage, ~30 min | Code tour, cheat sheet, mock walkthrough |
