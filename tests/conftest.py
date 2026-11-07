@@ -79,3 +79,44 @@ def contact_id(name: str) -> str:
 OPERATOR_ID = acct_by_name(PARENT)["account_id"]
 HARBORVIEW_ID = acct_by_name("Harborview Care Group (Parent Account)")["account_id"]
 CEDAR_TRAIL_ID = acct_by_name("Cedar Trail Communities (Parent Account)")["account_id"]
+
+
+# ---- matching fixtures (Task 4) ------------------------------------------------------------------
+def _match_fixtures():
+    from bellhaven_sync import match as match_module
+    from bellhaven_sync import rules
+    from bellhaven_sync.scrape import scrape
+
+    report = scrape(FETCH, BASE)
+    accounts = [dict(a) for a in _ACCOUNTS]
+    contacts = [dict(c) for c in _CONTACTS]
+    eligible = {a["account_id"] for a in accounts if rules.eligible(a, accounts, set())}
+    by_account = match_module.contacts_by_account(contacts)
+    return report, accounts, contacts, by_account, eligible, match_module
+
+
+REPORT, ACCOUNTS, CONTACTS, CONTACTS_BY_ACCOUNT, ELIGIBLE, match_module = _match_fixtures()
+LOC = {loc.slug: loc for loc in REPORT.locations}
+MATCHES = match_module.match_all(REPORT.locations, ACCOUNTS, CONTACTS, ELIGIBLE)
+
+
+def loc_with(slug: str, **fields):
+    from dataclasses import replace as dc_replace
+
+    return dc_replace(LOC[slug], **fields)
+
+
+def replace(accounts: list[dict], record: dict) -> list[dict]:
+    return [record if a["account_id"] == record["account_id"] else a for a in accounts]
+
+
+def all_candidate_suffixes(slug: str) -> set[str]:
+    m = MATCHES[slug]
+    return suffixes(list(m.group) + [c.account_id for c in m.lows + m.ruled_out])
+
+
+def sig(**true_fields):
+    from bellhaven_sync.models import Signals
+
+    base = {"street": False, "admin": False, "phone": False, "zip": False, "city": False, "name": 0.0, "po_box": False}
+    return Signals(**{**base, **true_fields})

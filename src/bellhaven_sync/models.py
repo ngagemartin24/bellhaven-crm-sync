@@ -21,3 +21,16 @@ class Location:
     administrator: str
     phone: str
     url: str
+
+
+@dataclass(frozen=True)
+class Signals:
+    """What one website location and one CRM account have in common (DESIGN 7.3)."""
+
+    street: bool
+    admin: bool
+    phone: bool
+    zip: bool
+    city: bool
+    name: float
+    po_box: bool
