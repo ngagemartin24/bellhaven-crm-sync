@@ -675,15 +675,15 @@ class _Builder:
             self.sold_duplicate(old, self.by_id[buyer], ev)
             verdict, reason = "Sold", f"{self.by_id[buyer].get('name')} is at the same address"
         elif case == "gone":
-            change = Change("set_field", oid, "status", "Needs Review", None)
-            kept = self.keep([change]) if old.get("status") != "Needs Review" else []
+            change = Change("set_field", oid, "status", rules.GONE_STATUS, None)
+            kept = self.keep([change]) if old.get("status") != rules.GONE_STATUS else []
             if kept:
                 day = self.today.isoformat()
                 step = Step(
                     1,
                     "PATCH",
                     f"/accounts/{oid}",
-                    {"status": "Needs Review"},
+                    {"status": rules.GONE_STATUS},
                     _patch_expect(old, ("status",), ("parent_id",), True),
                     self.note(rules.GONE_WHAT.format(day=day), rules.GONE_WHY),
                     (change.key,),
@@ -691,7 +691,7 @@ class _Builder:
                 self.add(
                     "gone",
                     old.get("name"),
-                    "Not on Bellhaven's website: mark Needs Review; parent unchanged",
+                    f"Not on Bellhaven's website: mark {rules.GONE_STATUS}; parent unchanged",
                     None,
                     [oid],
                     None,

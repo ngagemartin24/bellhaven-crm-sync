@@ -38,7 +38,7 @@ CRM API ─(read)────┘                         ▲                    
   [`src/bellhaven_sync/rules.py`](src/bellhaven_sync/rules.py).
 - **Billing rule.** Before an account moves to a different parent: with revenue history *and* outstanding
   AR, the old account is left exactly as it is, a new account is created under the right parent, and the
-  old one points to it through `chow_current_account`. Otherwise the account is re-parented directly.
+  old one points to it through `chow_current_account`. Otherwise, the account is re-parented directly.
 - **Review and apply.** Approve writes the card's steps in order. Before each write the app re-reads the
   record and writes only if it still holds what the reviewer saw; otherwise it stops and says what changed.
   A step log makes a retry safe, and a create whose answer never arrived is looked for, never sent twice.

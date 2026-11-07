@@ -92,6 +92,17 @@ def test_gone_cards_and_note():
     )
 
 
+def test_gone_status_is_one_edit_in_rules(monkeypatch):  # SC-7: the status lives in rules.GONE_STATUS
+    from bellhaven_sync import rules
+
+    assert {c.steps[0].body["status"] for c in CARDS if c.kind == "gone"} == {"Needs Review"}
+    monkeypatch.setattr(rules, "GONE_STATUS", "Inactive")
+    cards = propose(REPORT, ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set()).cards
+    gone = [c for c in cards if c.kind == "gone"]
+    assert len(gone) == 2 and {c.steps[0].body["status"] for c in gone} == {"Inactive"}
+    assert all("mark Inactive" in c.summary for c in gone)
+
+
 def test_steps_carry_what_was_reviewed():
     lima = card(kind="wrong_parent", account="9MB6KL").steps[0].expect["fields"]
     assert lima == {"parent_id": HARBORVIEW_ID, "lifetime_revenue": 47000, "outstanding_ar": 0, "note": ""}

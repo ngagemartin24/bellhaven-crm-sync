@@ -189,6 +189,7 @@ SECTION_FOR_KIND = {
 
 
 # ---- CRM notes (8.9) --------------------------------------------------------------------------------------
+GONE_STATUS = "Needs Review"  # an operator account off the website with nothing else at its address (8.6)
 GONE_WHAT = "Not listed on Bellhaven's website as of {day}"
 GONE_WHY = "no other CRM account at this address. Confirm closure or sale before re-parenting."
 
