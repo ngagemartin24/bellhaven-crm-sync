@@ -405,8 +405,9 @@ filter (10.3 step 2), so a rejected field can never ride along in another card's
 | Alternative group | open → claimed (owner's approval) → closed (owner done) · claimed → open (owner discarded) · open → closed as "none of these" (every card rejected; an attention card follows) |
 
 Each action has its allowed starting states: Approve, Reject and Acknowledge from pending; Retry from failed;
-Check again from needs-reconciliation; Discard from failed or needs-reconciliation. Any other state is refused
-with "already decided" or "not available now".
+Check again from needs-reconciliation; Discard from failed or needs-reconciliation, and only while **no write in
+the operation has been confirmed** (R4-1: a new account whose administrator contact is uncertain keeps its
+account; Check again or Retry finishes it). Any other state is refused with "already decided" or "not available now".
 
 A card and its operation move together inside one SQLite transaction; every move is guarded by the expected
 current status. Only the review app applies, and it runs as **one process holding an exclusive lock** on
@@ -466,7 +467,7 @@ banner and sort first in their section. The blind model check (17.1) uses this.
    state, ZIP, parent; for a contact: name, title, account) that no other operation has adopted: exactly one →
    adopted and the operation continues; none → "Not found yet" and the card waits; several → stop for a person.
    Timestamps are shown as evidence only; the CRM reports whole seconds, so they never decide ownership.
-   **Discard** of an uncertain create is allowed only when at least 10 minutes have passed since its intent
+   **Discard** of an uncertain create is allowed only when no earlier step of the operation is confirmed, at least 10 minutes have passed since its intent
    (thirty times the 20-second request timeout) and a Check again made after that found nothing; the next run
    proposes the location again, and that create re-checks that no account exists at the address. The CRM
    offers no create-once key, so this is the strongest guarantee available; the residual case is in section 20.
@@ -734,6 +735,14 @@ Round-1 status: 17 resolved, 8 partial (F3, F4, F9, F10, F14, F20, F23 and the N
 | N8 false "no other account at this address" note | 8.6: none / exactly one current / anything else → Needs attention / reserved → wait |
 | F14 an inactive account could be the successor | 8.6: the successor must be Active, eligible and compatible; consolidation named as such |
 | F20 crowded video | 18: Tiffin approve, Union Square reject, CRM browser |
+
+## Appendix B4. Independent review round 4 (GPT-6-Astra, 2026-11-07)
+
+Verdict on v4: NOT SOUND on one Major (R4-1: uncertain-create Discard could abandon an operation whose first
+create had landed). N5 resolved: the 10-minute bound is adequate for this use, with the disclosed residual risk.
+Section 9 byte-for-byte unchanged; 42 cards, 41/1, 127 accounts, 73 contacts re-derived. Fixed in v5: 10.4 and
+11 step 5 refuse Discard from either state once any write in the operation is confirmed; PLAN Task 6 and a Task 7
+test (account landed, administrator uncertain, Discard refused after 10 minutes).
 
 ## Appendix B3. Independent review round 3 (GPT-6-Astra) and consistency check, 2026-11-07
 
