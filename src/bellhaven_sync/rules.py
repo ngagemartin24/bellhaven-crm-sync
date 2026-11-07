@@ -83,11 +83,13 @@ def survivor_sort_key(acc: Account, loc: Location, contacts_by_account: dict, op
 
     revenue, ar = money(acc.get("lifetime_revenue")), money(acc.get("outstanding_ar"))
     contacts = contacts_by_account.get(acc["account_id"], [])
-    closeness = sum([
-        (acc.get("billing_street") or "") == loc.street,
-        bool(loc.phone) and norm_phone(acc.get("phone")) == norm_phone(loc.phone),
-        any(same_person(c.get("name"), loc.administrator) for c in contacts),
-    ])
+    closeness = sum(
+        [
+            (acc.get("billing_street") or "") == loc.street,
+            bool(loc.phone) and norm_phone(acc.get("phone")) == norm_phone(loc.phone),
+            any(same_person(c.get("name"), loc.administrator) for c in contacts),
+        ]
+    )
     return (
         0 if (revenue > 0 or ar > 0) else 1,
         -revenue,
@@ -117,8 +119,12 @@ def care_for_new(loc: Location) -> str:
 
 
 # ---- accounts that left the website (8.6) --------------------------------------------------------------
-def successor_case(old: Account, same_address_others: list[Account], loc_offerings: tuple[str, ...] | None,
-                   reserved: set[str]) -> tuple[str, str | None]:
+def successor_case(
+    old: Account,
+    same_address_others: list[Account],
+    loc_offerings: tuple[str, ...] | None,
+    reserved: set[str],
+) -> tuple[str, str | None]:
     """What happened to an operator account no longer on the website, judged by the other accounts at its address."""
     if not same_address_others:
         return ("gone", None)
@@ -132,9 +138,12 @@ def successor_case(old: Account, same_address_others: list[Account], loc_offerin
         return not mine or not theirs or mine == theirs
 
     buyers = [
-        a for a in same_address_others
-        if a.get("status") == "Active" and not a.get("duplicate_of_account")
-        and not a.get("chow_current_account") and compatible(a)
+        a
+        for a in same_address_others
+        if a.get("status") == "Active"
+        and not a.get("duplicate_of_account")
+        and not a.get("chow_current_account")
+        and compatible(a)
     ]
     if len(buyers) != 1:
         return ("attention", None)
@@ -143,13 +152,26 @@ def successor_case(old: Account, same_address_others: list[Account], loc_offerin
 
 # ---- review sections (8.1) ------------------------------------------------------------------------------
 SECTIONS = (
-    "Change of ownership", "Duplicates", "Wrong parent", "New accounts", "Gone from the website",
-    "Possible matches", "Renames", "Details", "Needs attention",
+    "Change of ownership",
+    "Duplicates",
+    "Wrong parent",
+    "New accounts",
+    "Gone from the website",
+    "Possible matches",
+    "Renames",
+    "Details",
+    "Needs attention",
 )
 SECTION_FOR_KIND = {
-    "chow": "Change of ownership", "duplicates": "Duplicates", "wrong_parent": "Wrong parent",
-    "new_account": "New accounts", "gone": "Gone from the website", "possible_match": "Possible matches",
-    "rename": "Renames", "details": "Details", "attention": "Needs attention",
+    "chow": "Change of ownership",
+    "duplicates": "Duplicates",
+    "wrong_parent": "Wrong parent",
+    "new_account": "New accounts",
+    "gone": "Gone from the website",
+    "possible_match": "Possible matches",
+    "rename": "Renames",
+    "details": "Details",
+    "attention": "Needs attention",
 }
 
 

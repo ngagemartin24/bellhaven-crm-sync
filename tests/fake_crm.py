@@ -11,9 +11,20 @@ from bellhaven_sync.crm import CrmError
 
 STATUSES = {"Active", "Inactive", "Needs Review"}
 ACCOUNT_DEFAULTS = {
-    "name": "", "parent_id": "", "parent_name": "", "billing_street": "", "billing_city": "",
-    "billing_state": "", "billing_zip": "", "phone": "", "care_type": "", "status": "Active",
-    "note": "", "duplicate_of_account": "", "chow_current_account": "", "lifetime_revenue": 0,
+    "name": "",
+    "parent_id": "",
+    "parent_name": "",
+    "billing_street": "",
+    "billing_city": "",
+    "billing_state": "",
+    "billing_zip": "",
+    "phone": "",
+    "care_type": "",
+    "status": "Active",
+    "note": "",
+    "duplicate_of_account": "",
+    "chow_current_account": "",
+    "lifetime_revenue": 0,
     "outstanding_ar": 0,
 }
 CONTACT_DEFAULTS = {"account_id": "", "name": "", "title": "", "email": "", "phone": "", "is_active": True}
@@ -42,7 +53,9 @@ class FakeCrm:
 
     # ---- switches for tests -----------------------------------------------------------------
     def fail_next(self, method: str, status: int, message: str, after: int = 0) -> None:
-        self._faults.append({"method": method, "kind": "fail", "skip": after, "status": status, "message": message})
+        self._faults.append(
+            {"method": method, "kind": "fail", "skip": after, "status": status, "message": message}
+        )
 
     def lose_next_response(self, method: str, after: int = 0) -> None:
         self._faults.append({"method": method, "kind": "lose", "skip": after})
@@ -171,8 +184,12 @@ class FakeCrm:
     def create_account(self, body: dict) -> dict:
         def do():
             self._counter += 1
-            rec = {**ACCOUNT_DEFAULTS, **body, "account_id": f"001FAKE{self._counter:011d}",
-                   "created_by_candidate": True}
+            rec = {
+                **ACCOUNT_DEFAULTS,
+                **body,
+                "account_id": f"001FAKE{self._counter:011d}",
+                "created_by_candidate": True,
+            }
             self._refresh(rec)
             self.accounts[rec["account_id"]] = rec
             return rec
@@ -185,8 +202,13 @@ class FakeCrm:
 
         def do():
             self._counter += 1
-            rec = {**CONTACT_DEFAULTS, **body, "contact_id": f"003FAKE{self._counter:011d}",
-                   "created_by_candidate": True, "updated_at": self._now()}
+            rec = {
+                **CONTACT_DEFAULTS,
+                **body,
+                "contact_id": f"003FAKE{self._counter:011d}",
+                "created_by_candidate": True,
+                "updated_at": self._now(),
+            }
             self.contacts[rec["contact_id"]] = rec
             return rec
 

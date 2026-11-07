@@ -118,7 +118,15 @@ def all_candidate_suffixes(slug: str) -> set[str]:
 def sig(**true_fields):
     from bellhaven_sync.models import Signals
 
-    base = {"street": False, "admin": False, "phone": False, "zip": False, "city": False, "name": 0.0, "po_box": False}
+    base = {
+        "street": False,
+        "admin": False,
+        "phone": False,
+        "zip": False,
+        "city": False,
+        "name": 0.0,
+        "po_box": False,
+    }
     return Signals(**{**base, **true_fields})
 
 
@@ -134,8 +142,13 @@ CARDS = PROPOSAL.cards
 
 
 def card(kind: str, slug: str | None = None, account: str | None = None):
-    hits = [c for c in CARDS if c.kind == kind and (slug is None or c.location_slug == slug)
-            and (account is None or full_id(account) in c.account_ids)]
+    hits = [
+        c
+        for c in CARDS
+        if c.kind == kind
+        and (slug is None or c.location_slug == slug)
+        and (account is None or full_id(account) in c.account_ids)
+    ]
     assert len(hits) == 1, f"{len(hits)} {kind} cards for {slug or account}"
     return hits[0]
 
@@ -153,11 +166,19 @@ def incomplete(report):
 
 
 def sorted_slugs_of_unchanged_rows() -> list[str]:
-    return sorted([
-        "bellhaven-of-maplewood", "bellhaven-of-new-carlisle", "bellhaven-of-wooster", "bellhaven-terrace-of-akron",
-        "bellhaven-of-saline", "bellhaven-of-meadville", "bellhaven-woods-of-toledo", "bellhaven-of-kalamazoo",
-        "bellhaven-court-of-altoona",
-    ])
+    return sorted(
+        [
+            "bellhaven-of-maplewood",
+            "bellhaven-of-new-carlisle",
+            "bellhaven-of-wooster",
+            "bellhaven-terrace-of-akron",
+            "bellhaven-of-saline",
+            "bellhaven-of-meadville",
+            "bellhaven-woods-of-toledo",
+            "bellhaven-of-kalamazoo",
+            "bellhaven-court-of-altoona",
+        ]
+    )
 
 
 # ---- ledger and run fixtures (Task 6) -----------------------------------------------------------
@@ -170,8 +191,13 @@ def fresh(tmp_path):
 
 
 def only(cards, kind: str, slug: str | None = None, account: str | None = None):
-    hits = [c for c in cards if c.kind == kind and (slug is None or c.location_slug == slug)
-            and (account is None or full_id(account) in c.account_ids)]
+    hits = [
+        c
+        for c in cards
+        if c.kind == kind
+        and (slug is None or c.location_slug == slug)
+        and (account is None or full_id(account) in c.account_ids)
+    ]
     assert len(hits) == 1, f"{len(hits)} {kind} cards for {slug or account}"
     return hits[0]
 

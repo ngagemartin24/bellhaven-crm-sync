@@ -37,8 +37,9 @@ def find_operator(accounts: list[Account], name: str) -> str:
     return hits[0]
 
 
-def run_once(fetch, crm, ledger: Ledger, operator_parent_name: str, today: date,
-             base_url: str = "") -> RunSummary:
+def run_once(
+    fetch, crm, ledger: Ledger, operator_parent_name: str, today: date, base_url: str = ""
+) -> RunSummary:
     report = scrape(fetch, base_url)
     try:
         accounts = crm.list_accounts()
@@ -47,13 +48,29 @@ def run_once(fetch, crm, ledger: Ledger, operator_parent_name: str, today: date,
         raise RunAborted(f"Could not read the CRM: {e}") from e
     operator_id = find_operator(accounts, operator_parent_name)
 
-    proposal = propose(report, accounts, contacts, operator_id, today,
-                       ledger.reserved_accounts(), ledger.reserved_locations(), ledger.decided_keys())
+    proposal = propose(
+        report,
+        accounts,
+        contacts,
+        operator_id,
+        today,
+        ledger.reserved_accounts(),
+        ledger.reserved_locations(),
+        ledger.decided_keys(),
+    )
     run_id = ledger.start_run()
     counts = ledger.record_cards(run_id, proposal.cards, report.complete)
     ledger.record_verdicts(run_id, proposal.verdicts)
     ledger.finish_run(run_id, report, len(accounts), counts)
     queue = [c for c in ledger.cards() if c.status in ("pending", "blocked")]
-    return RunSummary(run_id=run_id, complete=report.complete, reason=report.reason, found=report.found,
-                      stated=report.stated, accounts_read=len(accounts), counts=counts,
-                      by_section=dict(Counter(c.section for c in queue)), verdicts=proposal.verdicts)
+    return RunSummary(
+        run_id=run_id,
+        complete=report.complete,
+        reason=report.reason,
+        found=report.found,
+        stated=report.stated,
+        accounts_read=len(accounts),
+        counts=counts,
+        by_section=dict(Counter(c.section for c in queue)),
+        verdicts=proposal.verdicts,
+    )

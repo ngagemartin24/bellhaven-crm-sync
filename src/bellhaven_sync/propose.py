@@ -14,11 +14,30 @@ from .models import Account, Card, Change, Contact, Location, Step, Verdict, dig
 from .normalize import full_address, norm_phone, norm_zip
 from .scrape import ScrapeReport
 
-ACCOUNT_VIEW = ("name", "parent_id", "parent_name", "billing_street", "billing_city", "billing_state",
-                "billing_zip", "phone", "care_type", "status", "lifetime_revenue", "outstanding_ar",
-                "duplicate_of_account", "chow_current_account", "note")
-SIGNAL_POINTS = (("street", "Same street"), ("admin", "Administrator on file"), ("phone", "Same phone"),
-                 ("zip", "Same ZIP"), ("city", "Same city"))
+ACCOUNT_VIEW = (
+    "name",
+    "parent_id",
+    "parent_name",
+    "billing_street",
+    "billing_city",
+    "billing_state",
+    "billing_zip",
+    "phone",
+    "care_type",
+    "status",
+    "lifetime_revenue",
+    "outstanding_ar",
+    "duplicate_of_account",
+    "chow_current_account",
+    "note",
+)
+SIGNAL_POINTS = (
+    ("street", "Same street"),
+    ("admin", "Administrator on file"),
+    ("phone", "Same phone"),
+    ("zip", "Same ZIP"),
+    ("city", "Same city"),
+)
 
 
 @dataclass(frozen=True)
@@ -37,8 +56,16 @@ def _patch_expect(acc: Account, written, facts=(), with_note: bool = False) -> d
 
 
 class _Builder:
-    def __init__(self, accounts: list[Account], contacts: list[Contact], operator_id: str, today: date,
-                 reserved_accounts: set[str], reserved_locations: set[str], decided: frozenset[str]):
+    def __init__(
+        self,
+        accounts: list[Account],
+        contacts: list[Contact],
+        operator_id: str,
+        today: date,
+        reserved_accounts: set[str],
+        reserved_locations: set[str],
+        decided: frozenset[str],
+    ):
         self.accounts = accounts
         self.by_id = {a["account_id"]: a for a in accounts}
         self.by_account = contacts_by_account(contacts)
@@ -69,47 +96,92 @@ class _Builder:
     def note(self, what: str, why: str) -> str:
         return rules.note_line(self.today, what, why)
 
-    def add(self, kind: str, title: str, summary: str, slug: str | None, account_ids, band: str | None,
-            changes: list[Change], steps: list[Step], evidence: dict, alt_group: str | None = None) -> Card:
+    def add(
+        self,
+        kind: str,
+        title: str,
+        summary: str,
+        slug: str | None,
+        account_ids,
+        band: str | None,
+        changes: list[Change],
+        steps: list[Step],
+        evidence: dict,
+        alt_group: str | None = None,
+    ) -> Card:
         card = Card(
-            change_set=digest(sorted(c.key for c in changes)), kind=kind, section=rules.SECTION_FOR_KIND[kind],
-            title=title, summary=summary, location_slug=slug, account_ids=tuple(account_ids), band=band,
-            changes=tuple(changes), steps=tuple(steps), evidence=evidence, alt_group=alt_group,
+            change_set=digest(sorted(c.key for c in changes)),
+            kind=kind,
+            section=rules.SECTION_FOR_KIND[kind],
+            title=title,
+            summary=summary,
+            location_slug=slug,
+            account_ids=tuple(account_ids),
+            band=band,
+            changes=tuple(changes),
+            steps=tuple(steps),
+            evidence=evidence,
+            alt_group=alt_group,
         )
         self.cards.append(card)
         return card
 
     def view(self, account_id: str) -> dict:
         acc = self.by_id[account_id]
-        return {**{k: acc.get(k, "") for k in ACCOUNT_VIEW}, "account_id": account_id,
-                "contacts": [{"name": c.get("name"), "title": c.get("title")}
-                             for c in self.by_account.get(account_id, [])]}
+        return {
+            **{k: acc.get(k, "") for k in ACCOUNT_VIEW},
+            "account_id": account_id,
+            "contacts": [
+                {"name": c.get("name"), "title": c.get("title")} for c in self.by_account.get(account_id, [])
+            ],
+        }
 
     def billing(self, acc: Account, moving: bool) -> dict:
         rev, ar = rules.money(acc.get("lifetime_revenue")), rules.money(acc.get("outstanding_ar"))
         if not moving:
             rule = "No parent change, so the billing rule does not apply."
         elif rules.needs_chow(acc):
-            rule = ("Revenue history AND outstanding AR: keep this account exactly as it is, create a new account "
-                    "under the correct parent, and point the old one at it (billing SOP).")
+            rule = (
+                "Revenue history AND outstanding AR: keep this account exactly as it is, create a new account "
+                "under the correct parent, and point the old one at it (billing SOP)."
+            )
         else:
-            had = "revenue history" if rev > 0 else ("outstanding AR" if ar > 0 else "no revenue history or AR")
+            had = (
+                "revenue history" if rev > 0 else ("outstanding AR" if ar > 0 else "no revenue history or AR")
+            )
             rule = f"Not both revenue and AR ({had}): re-parent the existing account directly (billing SOP)."
-        return {"lifetime_revenue": rev, "outstanding_ar": ar, "needs_chow": rules.needs_chow(acc), "rule": rule}
+        return {
+            "lifetime_revenue": rev,
+            "outstanding_ar": ar,
+            "needs_chow": rules.needs_chow(acc),
+            "rule": rule,
+        }
 
     def signal_rows(self, candidates: list[Candidate]) -> list[dict]:
         rows = []
         for c in candidates:
             s = c.signals
-            rows.append({
-                "account_id": c.account_id, "name": self.by_id[c.account_id].get("name"), "band": c.band,
-                "score": c.score,
-                "signals": [{"label": label, "ok": getattr(s, key), "points": rules.WEIGHTS[key]}
-                            for key, label in SIGNAL_POINTS]
-                + [{"label": "Name overlap", "ok": s.name >= rules.LOW_NAME_OVERLAP, "points": round(rules.NAME_MAX * s.name),
-                    "detail": f"{s.name:.2f}"}],
-                "po_box": s.po_box,
-            })
+            rows.append(
+                {
+                    "account_id": c.account_id,
+                    "name": self.by_id[c.account_id].get("name"),
+                    "band": c.band,
+                    "score": c.score,
+                    "signals": [
+                        {"label": label, "ok": getattr(s, key), "points": rules.WEIGHTS[key]}
+                        for key, label in SIGNAL_POINTS
+                    ]
+                    + [
+                        {
+                            "label": "Name overlap",
+                            "ok": s.name >= rules.LOW_NAME_OVERLAP,
+                            "points": round(rules.NAME_MAX * s.name),
+                            "detail": f"{s.name:.2f}",
+                        }
+                    ],
+                    "po_box": s.po_box,
+                }
+            )
         return rows
 
     def evidence(self, m: LocationMatch | None, account_ids, billing: dict | None = None, **extra) -> dict:
@@ -122,10 +194,17 @@ class _Builder:
                     reason = "weaker than the match above"
                 else:
                     reason = f"{c.band} match not used"
-                ruled_out.append({"account_id": c.account_id, "name": self.by_id[c.account_id].get("name"),
-                                  "reason": reason})
+                ruled_out.append(
+                    {
+                        "account_id": c.account_id,
+                        "name": self.by_id[c.account_id].get("name"),
+                        "reason": reason,
+                    }
+                )
         return {
-            "site": ({**asdict(m.location), "offerings": list(m.location.offerings)} if m is not None else None),
+            "site": (
+                {**asdict(m.location), "offerings": list(m.location.offerings)} if m is not None else None
+            ),
             "crm": [self.view(a) for a in account_ids if a in self.by_id],
             "signals": self.signal_rows(m.candidates) if m is not None else [],
             "ruled_out": ruled_out,
@@ -135,42 +214,83 @@ class _Builder:
         }
 
     def identity(self, loc: Location) -> dict:
-        return {"name": loc.name, "billing_street": loc.street, "billing_city": loc.city,
-                "billing_state": loc.state, "billing_zip": loc.zip, "parent_id": self.op,
-                "administrator": loc.administrator}
+        return {
+            "name": loc.name,
+            "billing_street": loc.street,
+            "billing_city": loc.city,
+            "billing_state": loc.state,
+            "billing_zip": loc.zip,
+            "parent_id": self.op,
+            "administrator": loc.administrator,
+        }
 
     def create_steps(self, loc: Location, note: str, key: str) -> list[Step]:
-        body = {"name": loc.name, "billing_street": loc.street, "billing_city": loc.city,
-                "billing_state": loc.state, "billing_zip": loc.zip, "phone": loc.phone,
-                "care_type": rules.care_for_new(loc), "parent_id": self.op, "status": "Active", "note": note}
-        absent = {k: body[k] for k in ("parent_id", "billing_street", "billing_city", "billing_state", "billing_zip")}
+        body = {
+            "name": loc.name,
+            "billing_street": loc.street,
+            "billing_city": loc.city,
+            "billing_state": loc.state,
+            "billing_zip": loc.zip,
+            "phone": loc.phone,
+            "care_type": rules.care_for_new(loc),
+            "parent_id": self.op,
+            "status": "Active",
+            "note": note,
+        }
+        absent = {
+            k: body[k]
+            for k in ("parent_id", "billing_street", "billing_city", "billing_state", "billing_zip")
+        }
         steps = [Step(1, "POST", "/accounts", body, {"absent_account": absent}, None, (key,))]
         if loc.administrator:
-            contact = {"account_id": {"$created": 1}, "name": loc.administrator, "title": "Administrator",
-                       "phone": loc.phone, "is_active": True}
-            steps.append(Step(2, "POST", "/contacts", contact,
-                              {"absent_contact": {"account_id": {"$created": 1}, "name": loc.administrator}},
-                              None, (key,)))
+            contact = {
+                "account_id": {"$created": 1},
+                "name": loc.administrator,
+                "title": "Administrator",
+                "phone": loc.phone,
+                "is_active": True,
+            }
+            steps.append(
+                Step(
+                    2,
+                    "POST",
+                    "/contacts",
+                    contact,
+                    {"absent_contact": {"account_id": {"$created": 1}, "name": loc.administrator}},
+                    None,
+                    (key,),
+                )
+            )
         return steps
 
     # ---- one website location ----------------------------------------------------------------------
     def location(self, m: LocationMatch) -> None:
         loc = m.location
         start = len(self.cards)
-        attention_lows = [c for c in m.lows if self.by_id[c.account_id].get("parent_id") != self.op
-                          and rules.needs_chow(self.by_id[c.account_id])]
+        attention_lows = [
+            c
+            for c in m.lows
+            if self.by_id[c.account_id].get("parent_id") != self.op
+            and rules.needs_chow(self.by_id[c.account_id])
+        ]
         if m.conflicts:
             self.attention(loc.slug, loc.slug, loc.name, m.conflicts, self.evidence(m, m.group))
         elif m.group:
-            ordered = sorted(m.group, key=lambda i: rules.survivor_sort_key(self.by_id[i], loc, self.by_account,
-                                                                              self.op))
+            ordered = sorted(
+                m.group, key=lambda i: rules.survivor_sort_key(self.by_id[i], loc, self.by_account, self.op)
+            )
             if len(ordered) > 1:
                 self.duplicates(m, ordered[0], ordered[1:])
             self.matched(m, ordered[0])
         elif attention_lows:
-            lines = [f"{self.by_id[c.account_id].get('name')} ({c.account_id}) may be this facility, but linking "
-                     "it would need the billing route (revenue and AR); decide by hand" for c in attention_lows]
-            self.attention(loc.slug, loc.slug, loc.name, lines, self.evidence(m, [c.account_id for c in m.lows]))
+            lines = [
+                f"{self.by_id[c.account_id].get('name')} ({c.account_id}) may be this facility, but linking "
+                "it would need the billing route (revenue and AR); decide by hand"
+                for c in attention_lows
+            ]
+            self.attention(
+                loc.slug, loc.slug, loc.name, lines, self.evidence(m, [c.account_id for c in m.lows])
+            )
         else:
             alt = f"alt:{loc.slug}" if m.lows else None
             self.new_account(m, alt)
@@ -183,7 +303,10 @@ class _Builder:
         loc = m.location
         sets = tuple(c.change_set for c in made)
         if m.conflicts or attention_lows:
-            verdict, reason = "Needs attention", "; ".join(m.conflicts) or "a look-alike needs the billing route"
+            verdict, reason = (
+                "Needs attention",
+                "; ".join(m.conflicts) or "a look-alike needs the billing route",
+            )
         elif m.group:
             top = next(c for c in m.candidates if c.account_id in m.group)
             shared = ", ".join(label.lower() for key, label in SIGNAL_POINTS if getattr(top.signals, key))
@@ -217,25 +340,53 @@ class _Builder:
         details = self.keep(self.detail_changes(acc, loc))
         if details:
             fields = {c.field: c.value for c in details}
-            labels = [f"{f.replace('billing_', '')} {acc.get(f) or '(blank)'} → {v}" for f, v in fields.items()]
-            step = Step(1, "PATCH", f"/accounts/{aid}", fields, _patch_expect(acc, fields), None,
-                        tuple(c.key for c in details))
-            self.add("details", loc.name, "Update " + "; ".join(labels), loc.slug, [aid], m.band, details, [step],
-                     self.evidence(m, [aid]))
+            labels = [
+                f"{f.replace('billing_', '')} {acc.get(f) or '(blank)'} → {v}" for f, v in fields.items()
+            ]
+            step = Step(
+                1,
+                "PATCH",
+                f"/accounts/{aid}",
+                fields,
+                _patch_expect(acc, fields),
+                None,
+                tuple(c.key for c in details),
+            )
+            self.add(
+                "details",
+                loc.name,
+                "Update " + "; ".join(labels),
+                loc.slug,
+                [aid],
+                m.band,
+                details,
+                [step],
+                self.evidence(m, [aid]),
+            )
 
     def detail_changes(self, acc: Account, loc: Location) -> list[Change]:
-        site = {"phone": loc.phone, "billing_street": loc.street, "billing_city": loc.city,
-                "billing_state": loc.state, "billing_zip": loc.zip, "care_type": rules.care_for_new(loc)}
+        site = {
+            "phone": loc.phone,
+            "billing_street": loc.street,
+            "billing_city": loc.city,
+            "billing_state": loc.state,
+            "billing_zip": loc.zip,
+            "care_type": rules.care_for_new(loc),
+        }
         differs = {
             "phone": bool(loc.phone) and norm_phone(acc.get("phone")) != norm_phone(loc.phone),
-            "billing_street": bool(loc.street) and rules.can_sync_street(acc.get("billing_street") or "", loc.street),
+            "billing_street": bool(loc.street)
+            and rules.can_sync_street(acc.get("billing_street") or "", loc.street),
             "billing_city": (acc.get("billing_city") or "").strip().lower() != loc.city.lower(),
             "billing_state": (acc.get("billing_state") or "").strip().upper() != loc.state,
             "billing_zip": norm_zip(acc.get("billing_zip")) != loc.zip,
             "care_type": bool(loc.offerings) and not rules.care_compatible(acc.get("care_type"), loc),
         }
-        return [Change("set_field", acc["account_id"], f, site[f], loc.slug)
-                for f in rules.DETAIL_FIELDS if differs[f]]
+        return [
+            Change("set_field", acc["account_id"], f, site[f], loc.slug)
+            for f in rules.DETAIL_FIELDS
+            if differs[f]
+        ]
 
     def ownership_card(self, m: LocationMatch, acc: Account, own: list[Change]) -> None:
         loc, aid = m.location, acc["account_id"]
@@ -245,8 +396,10 @@ class _Builder:
         if moving:
             was = acc.get("parent_name") or "no parent"
             what.append(f"moved under {self.op_name} (was {was})")
-            summary.append(f"Move to Bellhaven directly (was {was}; {_dollars(acc.get('lifetime_revenue'))} revenue, "
-                           f"{_dollars(acc.get('outstanding_ar'))} AR)")
+            summary.append(
+                f"Move to Bellhaven directly (was {was}; {_dollars(acc.get('lifetime_revenue'))} revenue, "
+                f"{_dollars(acc.get('outstanding_ar'))} AR)"
+            )
         if "name" in fields:
             what.append(f"renamed from {acc.get('name')!r}")
             summary.append(f"Rename {acc.get('name')!r} → {loc.name!r}")
@@ -256,11 +409,26 @@ class _Builder:
         why = f"listed on Bellhaven's website as {loc.name} ({loc.url})"
         if moving:
             why += "; not both revenue and AR, so it moves directly (billing SOP)"
-        step = Step(1, "PATCH", f"/accounts/{aid}", fields,
-                    _patch_expect(acc, fields, ("lifetime_revenue", "outstanding_ar") if moving else (), True),
-                    self.note(", ".join(what).capitalize(), why), tuple(c.key for c in own))
-        self.add("wrong_parent" if moving else "rename", loc.name, "; ".join(summary), loc.slug, [aid], m.band, own,
-                 [step], self.evidence(m, [aid], self.billing(acc, moving)))
+        step = Step(
+            1,
+            "PATCH",
+            f"/accounts/{aid}",
+            fields,
+            _patch_expect(acc, fields, ("lifetime_revenue", "outstanding_ar") if moving else (), True),
+            self.note(", ".join(what).capitalize(), why),
+            tuple(c.key for c in own),
+        )
+        self.add(
+            "wrong_parent" if moving else "rename",
+            loc.name,
+            "; ".join(summary),
+            loc.slug,
+            [aid],
+            m.band,
+            own,
+            [step],
+            self.evidence(m, [aid], self.billing(acc, moving)),
+        )
 
     def duplicates(self, m: LocationMatch, survivor: str, losers: list[str]) -> None:
         loc, sacc = m.location, self.by_id[survivor]
@@ -270,24 +438,59 @@ class _Builder:
         steps: list[Step] = []
         for ch in changes:
             lacc = self.by_id[ch.record]
-            steps.append(Step(
-                len(steps) + 1, "PATCH", f"/accounts/{ch.record}",
-                {"duplicate_of_account": survivor, "status": "Inactive"},
-                _patch_expect(lacc, ("duplicate_of_account", "status"), ("parent_id", "chow_current_account"), True),
-                self.note(f"Duplicate of {sacc.get('name')} ({survivor}); marked Inactive",
-                          f"same facility as Bellhaven's {loc.name} at {loc.street}, {loc.city}"),
-                (ch.key,)))
+            steps.append(
+                Step(
+                    len(steps) + 1,
+                    "PATCH",
+                    f"/accounts/{ch.record}",
+                    {"duplicate_of_account": survivor, "status": "Inactive"},
+                    _patch_expect(
+                        lacc, ("duplicate_of_account", "status"), ("parent_id", "chow_current_account"), True
+                    ),
+                    self.note(
+                        f"Duplicate of {sacc.get('name')} ({survivor}); marked Inactive",
+                        f"same facility as Bellhaven's {loc.name} at {loc.street}, {loc.city}",
+                    ),
+                    (ch.key,),
+                )
+            )
             for c in self.by_account.get(ch.record, []):
-                steps.append(Step(len(steps) + 1, "PATCH", f"/contacts/{c['contact_id']}", {"account_id": survivor},
-                                  {"fields": {"account_id": ch.record}}, None, (ch.key,)))
-        billed = [a for a in [survivor, *losers] if rules.money(self.by_id[a].get("lifetime_revenue")) > 0
-                  or rules.money(self.by_id[a].get("outstanding_ar")) > 0]
-        warning = "More than one copy has billing history; check before approving." if len(billed) > 1 else None
+                steps.append(
+                    Step(
+                        len(steps) + 1,
+                        "PATCH",
+                        f"/contacts/{c['contact_id']}",
+                        {"account_id": survivor},
+                        {"fields": {"account_id": ch.record}},
+                        None,
+                        (ch.key,),
+                    )
+                )
+        billed = [
+            a
+            for a in [survivor, *losers]
+            if rules.money(self.by_id[a].get("lifetime_revenue")) > 0
+            or rules.money(self.by_id[a].get("outstanding_ar")) > 0
+        ]
+        warning = (
+            "More than one copy has billing history; check before approving." if len(billed) > 1 else None
+        )
         moved = sum(1 for s in steps if s.path.startswith("/contacts/"))
-        summary = (f"Keep {sacc.get('name')}; retire {len(changes)} duplicate cop{'y' if len(changes) == 1 else 'ies'}"
-                   + (f" and move {moved} contact{'s' if moved != 1 else ''}" if moved else ""))
-        self.add("duplicates", loc.name, summary, loc.slug, [survivor, *[c.record for c in changes]], m.band,
-                 changes, steps, self.evidence(m, [survivor, *losers], survivor=survivor, warning=warning))
+        summary = (
+            f"Keep {sacc.get('name')}; retire {len(changes)} duplicate cop{'y' if len(changes) == 1 else 'ies'}"
+            + (f" and move {moved} contact{'s' if moved != 1 else ''}" if moved else "")
+        )
+        self.add(
+            "duplicates",
+            loc.name,
+            summary,
+            loc.slug,
+            [survivor, *[c.record for c in changes]],
+            m.band,
+            changes,
+            steps,
+            self.evidence(m, [survivor, *losers], survivor=survivor, warning=warning),
+        )
 
     def chow_new(self, m: LocationMatch, old: Account) -> None:
         loc, oid = m.location, old["account_id"]
@@ -296,32 +499,67 @@ class _Builder:
         if len(self.keep([create, pointer])) < 2:
             return  # the two halves are decided together; never half a change of ownership
         rev, ar = _dollars(old.get("lifetime_revenue")), _dollars(old.get("outstanding_ar"))
-        note = self.note(f"Created for {loc.name} under {self.op_name}",
-                         f"the previous account {old.get('name')} ({oid}) under {old.get('parent_name') or 'no parent'}"
-                         f" is kept unchanged for billing ({rev} revenue, {ar} outstanding AR) and points here")
+        note = self.note(
+            f"Created for {loc.name} under {self.op_name}",
+            f"the previous account {old.get('name')} ({oid}) under {old.get('parent_name') or 'no parent'}"
+            f" is kept unchanged for billing ({rev} revenue, {ar} outstanding AR) and points here",
+        )
         steps = self.create_steps(loc, note, create.key)
-        steps.append(Step(len(steps) + 1, "PATCH", f"/accounts/{oid}", {"chow_current_account": {"$created": 1}},
-                          _patch_expect(old, ("chow_current_account",),
-                                        ("duplicate_of_account", "parent_id", "lifetime_revenue", "outstanding_ar")),
-                          None, (pointer.key,)))
+        steps.append(
+            Step(
+                len(steps) + 1,
+                "PATCH",
+                f"/accounts/{oid}",
+                {"chow_current_account": {"$created": 1}},
+                _patch_expect(
+                    old,
+                    ("chow_current_account",),
+                    ("duplicate_of_account", "parent_id", "lifetime_revenue", "outstanding_ar"),
+                ),
+                None,
+                (pointer.key,),
+            )
+        )
         summary = f"Move to Bellhaven: new account; old kept for billing ({rev} revenue, {ar} AR)"
-        self.add("chow", loc.name, summary, loc.slug, [oid], m.band, [create, pointer], steps,
-                 self.evidence(m, [oid], self.billing(old, True)))
+        self.add(
+            "chow",
+            loc.name,
+            summary,
+            loc.slug,
+            [oid],
+            m.band,
+            [create, pointer],
+            steps,
+            self.evidence(m, [oid], self.billing(old, True)),
+        )
 
     def new_account(self, m: LocationMatch, alt: str | None) -> None:
         loc = m.location
         create = Change("create_account", f"loc:{loc.slug}", "", self.identity(loc), loc.slug)
         if not self.keep([create]):
             return
-        steps = self.create_steps(loc, self.note(f"Created from Bellhaven's website ({loc.url})",
-                                                 "this location had no CRM account"), create.key)
+        steps = self.create_steps(
+            loc,
+            self.note(f"Created from Bellhaven's website ({loc.url})", "this location had no CRM account"),
+            create.key,
+        )
         summary = f"Create {loc.name} ({loc.city}, {loc.state}) under Bellhaven"
         if loc.administrator:
             summary += f", with administrator {loc.administrator}"
         if alt:
             summary += "; or choose the possible match"
-        self.add("new_account", loc.name, summary, loc.slug, [], None, [create], steps,
-                 self.evidence(m, [c.account_id for c in m.lows]), alt)
+        self.add(
+            "new_account",
+            loc.name,
+            summary,
+            loc.slug,
+            [],
+            None,
+            [create],
+            steps,
+            self.evidence(m, [c.account_id for c in m.lows]),
+            alt,
+        )
 
     def possible_match(self, m: LocationMatch, cand: Candidate, alt: str | None) -> None:
         loc, acc, aid = m.location, self.by_id[cand.account_id], cand.account_id
@@ -337,46 +575,93 @@ class _Builder:
             return
         fields = {c.field: c.value for c in changes}
         moving = "parent_id" in fields
-        step = Step(1, "PATCH", f"/accounts/{aid}", fields,
-                    _patch_expect(acc, fields, ("lifetime_revenue", "outstanding_ar") if moving else (), True),
-                    self.note(f"Linked to Bellhaven's {loc.name}; updated {', '.join(fields)}",
-                              "a reviewer confirmed this is the same facility"),
-                    tuple(c.key for c in changes))
-        summary = (f"Treat {acc.get('name')} as this facility: update {', '.join(f.replace('billing_', '') for f in fields)}"
-                   f" (name overlap only; no shared street, administrator or phone)")
-        self.add("possible_match", loc.name, summary, loc.slug, [aid], cand.band, changes, [step],
-                 self.evidence(m, [aid], self.billing(acc, moving)), alt)
+        step = Step(
+            1,
+            "PATCH",
+            f"/accounts/{aid}",
+            fields,
+            _patch_expect(acc, fields, ("lifetime_revenue", "outstanding_ar") if moving else (), True),
+            self.note(
+                f"Linked to Bellhaven's {loc.name}; updated {', '.join(fields)}",
+                "a reviewer confirmed this is the same facility",
+            ),
+            tuple(c.key for c in changes),
+        )
+        summary = (
+            f"Treat {acc.get('name')} as this facility: update {', '.join(f.replace('billing_', '') for f in fields)}"
+            f" (name overlap only; no shared street, administrator or phone)"
+        )
+        self.add(
+            "possible_match",
+            loc.name,
+            summary,
+            loc.slug,
+            [aid],
+            cand.band,
+            changes,
+            [step],
+            self.evidence(m, [aid], self.billing(acc, moving)),
+            alt,
+        )
 
     def attention(self, subject: str, slug: str | None, title: str, lines: list[str], evidence: dict) -> None:
         description = "; ".join(lines)
         change = Change("attention", subject, "", digest(description), slug)
         if not self.keep([change]):
             return
-        self.add("attention", title, description, slug, [a["account_id"] for a in evidence.get("crm", [])], None,
-                 [change], [], evidence)
+        self.add(
+            "attention",
+            title,
+            description,
+            slug,
+            [a["account_id"] for a in evidence.get("crm", [])],
+            None,
+            [change],
+            [],
+            evidence,
+        )
 
     # ---- operator accounts no longer on the website (8.6) ------------------------------------------------
     def leftovers(self, matches: dict[str, LocationMatch]) -> None:
         matched = {aid for m in matches.values() for aid in m.group}
-        children = [a for a in self.accounts
-                    if a.get("parent_id") == self.op and a["account_id"] not in matched and a.get("status") != "Inactive"
-                    and rules.eligible(a, self.accounts, self.reserved_accounts)]
+        children = [
+            a
+            for a in self.accounts
+            if a.get("parent_id") == self.op
+            and a["account_id"] not in matched
+            and a.get("status") != "Inactive"
+            and rules.eligible(a, self.accounts, self.reserved_accounts)
+        ]
         for old in sorted(children, key=lambda a: a["account_id"]):
             self.leftover(old)
 
     def leftover(self, old: Account) -> None:
         oid = old["account_id"]
-        addr = full_address(old.get("billing_street"), old.get("billing_city"), old.get("billing_state"),
-                            old.get("billing_zip"))
-        others = [a for a in self.accounts
-                  if a["account_id"] != oid and a.get("parent_id") != self.op
-                  and not rules.is_parent_account(a, self.accounts)
-                  and full_address(a.get("billing_street"), a.get("billing_city"), a.get("billing_state"),
-                                   a.get("billing_zip")) == addr]
+        addr = full_address(
+            old.get("billing_street"),
+            old.get("billing_city"),
+            old.get("billing_state"),
+            old.get("billing_zip"),
+        )
+        others = [
+            a
+            for a in self.accounts
+            if a["account_id"] != oid
+            and a.get("parent_id") != self.op
+            and not rules.is_parent_account(a, self.accounts)
+            and full_address(
+                a.get("billing_street"), a.get("billing_city"), a.get("billing_state"), a.get("billing_zip")
+            )
+            == addr
+        ]
         case, buyer = rules.successor_case(old, others, None, self.reserved_accounts)
         start = len(self.cards)
-        ev = self.evidence(None, [oid, *[a["account_id"] for a in others]], self.billing(old, case != "gone"),
-                           same_address=[a["account_id"] for a in others])
+        ev = self.evidence(
+            None,
+            [oid, *[a["account_id"] for a in others]],
+            self.billing(old, case != "gone"),
+            same_address=[a["account_id"] for a in others],
+        )
         if case == "sold_chow":
             self.sold_chow(old, self.by_id[buyer], ev)
             verdict, reason = "Sold", f"{self.by_id[buyer].get('name')} is at the same address"
@@ -388,16 +673,35 @@ class _Builder:
             kept = self.keep([change]) if old.get("status") != "Needs Review" else []
             if kept:
                 day = self.today.isoformat()
-                step = Step(1, "PATCH", f"/accounts/{oid}", {"status": "Needs Review"},
-                            _patch_expect(old, ("status",), ("parent_id",), True),
-                            self.note(rules.GONE_WHAT.format(day=day), rules.GONE_WHY), (change.key,))
-                self.add("gone", old.get("name"), "Not on Bellhaven's website: mark Needs Review; parent unchanged",
-                         None, [oid], None, kept, [step], ev)
+                step = Step(
+                    1,
+                    "PATCH",
+                    f"/accounts/{oid}",
+                    {"status": "Needs Review"},
+                    _patch_expect(old, ("status",), ("parent_id",), True),
+                    self.note(rules.GONE_WHAT.format(day=day), rules.GONE_WHY),
+                    (change.key,),
+                )
+                self.add(
+                    "gone",
+                    old.get("name"),
+                    "Not on Bellhaven's website: mark Needs Review; parent unchanged",
+                    None,
+                    [oid],
+                    None,
+                    kept,
+                    [step],
+                    ev,
+                )
             verdict, reason = "Gone from the website", "no other CRM account at this address"
         elif case == "attention":
             names = ", ".join(a.get("name", "") for a in others)
-            lines = [(f"{old.get('name')} is no longer on Bellhaven's website; the accounts at its address "
-                      f"({names}) are not exactly one Active, compatible account")]
+            lines = [
+                (
+                    f"{old.get('name')} is no longer on Bellhaven's website; the accounts at its address "
+                    f"({names}) are not exactly one Active, compatible account"
+                )
+            ]
             self.attention(oid, None, old.get("name"), lines, ev)
             verdict, reason = "Needs attention", lines[0]
         else:
@@ -412,17 +716,35 @@ class _Builder:
             return
         rev, ar = _dollars(old.get("lifetime_revenue")), _dollars(old.get("outstanding_ar"))
         steps = [
-            Step(1, "PATCH", f"/accounts/{oid}", {"chow_current_account": bid},
-                 _patch_expect(old, ("chow_current_account",),
-                               ("duplicate_of_account", "parent_id", "lifetime_revenue", "outstanding_ar")),
-                 None, (pointer.key,)),
-            Step(2, "PATCH", f"/accounts/{bid}", {},
-                 _patch_expect(buyer, (), ("status", "parent_id", "duplicate_of_account", "chow_current_account"), True),
-                 self.note(f"Now the current account for {old.get('name')} ({oid})",
-                           f"{old.get('name')} is no longer on Bellhaven's website and this account is at the same "
-                           f"address; the old account is kept unchanged for billing ({rev} revenue, {ar} outstanding "
-                           "AR) and points here"),
-                 (pointer.key,)),
+            Step(
+                1,
+                "PATCH",
+                f"/accounts/{oid}",
+                {"chow_current_account": bid},
+                _patch_expect(
+                    old,
+                    ("chow_current_account",),
+                    ("duplicate_of_account", "parent_id", "lifetime_revenue", "outstanding_ar"),
+                ),
+                None,
+                (pointer.key,),
+            ),
+            Step(
+                2,
+                "PATCH",
+                f"/accounts/{bid}",
+                {},
+                _patch_expect(
+                    buyer, (), ("status", "parent_id", "duplicate_of_account", "chow_current_account"), True
+                ),
+                self.note(
+                    f"Now the current account for {old.get('name')} ({oid})",
+                    f"{old.get('name')} is no longer on Bellhaven's website and this account is at the same "
+                    f"address; the old account is kept unchanged for billing ({rev} revenue, {ar} outstanding "
+                    "AR) and points here",
+                ),
+                (pointer.key,),
+            ),
         ]
         summary = f"Sold to {buyer.get('parent_name') or 'another owner'}: point the old account at {buyer.get('name')}; old kept for billing ({rev} revenue, {ar} AR)"
         self.add("chow", old.get("name"), summary, None, [oid, bid], None, [pointer], steps, ev)
@@ -432,21 +754,57 @@ class _Builder:
         change = Change("retire_duplicate", oid, "", bid, None)
         if not self.keep([change]):
             return
-        steps = [Step(1, "PATCH", f"/accounts/{oid}", {"duplicate_of_account": bid, "status": "Inactive"},
-                      _patch_expect(old, ("duplicate_of_account", "status"), ("parent_id", "chow_current_account"), True),
-                      self.note(f"Duplicate of {buyer.get('name')} ({bid}); marked Inactive",
-                                "no longer on Bellhaven's website; the current owner's account is at the same address"),
-                      (change.key,))]
+        steps = [
+            Step(
+                1,
+                "PATCH",
+                f"/accounts/{oid}",
+                {"duplicate_of_account": bid, "status": "Inactive"},
+                _patch_expect(
+                    old, ("duplicate_of_account", "status"), ("parent_id", "chow_current_account"), True
+                ),
+                self.note(
+                    f"Duplicate of {buyer.get('name')} ({bid}); marked Inactive",
+                    "no longer on Bellhaven's website; the current owner's account is at the same address",
+                ),
+                (change.key,),
+            )
+        ]
         for c in self.by_account.get(oid, []):
-            steps.append(Step(len(steps) + 1, "PATCH", f"/contacts/{c['contact_id']}", {"account_id": bid},
-                              {"fields": {"account_id": oid}}, None, (change.key,)))
-        self.add("duplicates", old.get("name"), f"Sold: retire as a duplicate of {buyer.get('name')}", None,
-                 [bid, oid], None, [change], steps, ev)
+            steps.append(
+                Step(
+                    len(steps) + 1,
+                    "PATCH",
+                    f"/contacts/{c['contact_id']}",
+                    {"account_id": bid},
+                    {"fields": {"account_id": oid}},
+                    None,
+                    (change.key,),
+                )
+            )
+        self.add(
+            "duplicates",
+            old.get("name"),
+            f"Sold: retire as a duplicate of {buyer.get('name')}",
+            None,
+            [bid, oid],
+            None,
+            [change],
+            steps,
+            ev,
+        )
 
 
-def propose(report: ScrapeReport, accounts: list[Account], contacts: list[Contact], operator_id: str, today: date,
-            reserved_accounts: set[str], reserved_locations: set[str],
-            decided: frozenset[str] = frozenset()) -> Proposal:
+def propose(
+    report: ScrapeReport,
+    accounts: list[Account],
+    contacts: list[Contact],
+    operator_id: str,
+    today: date,
+    reserved_accounts: set[str],
+    reserved_locations: set[str],
+    decided: frozenset[str] = frozenset(),
+) -> Proposal:
     eligible_ids = {a["account_id"] for a in accounts if rules.eligible(a, accounts, reserved_accounts)}
     matches = match_all(report.locations, accounts, contacts, eligible_ids)
     b = _Builder(accounts, contacts, operator_id, today, reserved_accounts, reserved_locations, decided)

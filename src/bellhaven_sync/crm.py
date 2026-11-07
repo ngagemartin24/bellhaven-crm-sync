@@ -46,8 +46,9 @@ class CrmClient:
         self.read_only = read_only
 
     def _call(self, method: str, path: str, params: dict | None = None, body: dict | None = None) -> Any:
-        r = self._session.request(method, self._base + path, headers=self._headers, params=params,
-                                  json=body, timeout=TIMEOUT_S)
+        r = self._session.request(
+            method, self._base + path, headers=self._headers, params=params, json=body, timeout=TIMEOUT_S
+        )
         if r.status_code >= 400:
             raise CrmError(r.status_code, _detail(r))
         data = r.json()

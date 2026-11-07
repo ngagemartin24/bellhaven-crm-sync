@@ -35,8 +35,12 @@ class ErrorStub:
 
 def test_read_only_client_refuses_every_write():
     c = CrmClient("http://x", "t")
-    for call in (lambda: c.patch_account("a", {}), lambda: c.patch_contact("c", {}),
-                 lambda: c.create_account({}), lambda: c.create_contact({})):
+    for call in (
+        lambda: c.patch_account("a", {}),
+        lambda: c.patch_contact("c", {}),
+        lambda: c.create_account({}),
+        lambda: c.create_contact({}),
+    ):
         with pytest.raises(ReadOnlyError):
             call()
 
@@ -49,14 +53,18 @@ def test_pagination_reads_until_short_page():
 
 def test_error_carries_detail_not_token():
     with pytest.raises(CrmError) as e:
-        CrmClient("http://x", "SECRET", read_only=False, session=ErrorStub(422, {"detail": "bad field"})).create_account({})
+        CrmClient(
+            "http://x", "SECRET", read_only=False, session=ErrorStub(422, {"detail": "bad field"})
+        ).create_account({})
     assert e.value.status == 422 and "bad field" in str(e.value) and "SECRET" not in str(e.value)
 
 
 def test_validation_error_list_is_readable():  # FastAPI-style 422 detail
     body = {"detail": [{"loc": ["body", "status"], "msg": "Input should be 'Active'"}]}
     with pytest.raises(CrmError) as e:
-        CrmClient("http://x", "t", read_only=False, session=ErrorStub(422, body)).patch_account("a", {"status": "x"})
+        CrmClient("http://x", "t", read_only=False, session=ErrorStub(422, body)).patch_account(
+            "a", {"status": "x"}
+        )
     assert "status" in e.value.message and "Input should be 'Active'" in e.value.message
 
 

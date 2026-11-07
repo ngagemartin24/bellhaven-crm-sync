@@ -4,18 +4,43 @@ import html
 import re
 
 STREET_TOKENS = {
-    "rd": "road", "dr": "drive", "ave": "avenue", "blvd": "boulevard", "ln": "lane",
-    "pk": "pike", "pke": "pike", "hwy": "highway", "ct": "court", "pl": "place",
-    "pkwy": "parkway", "cir": "circle",
+    "rd": "road",
+    "dr": "drive",
+    "ave": "avenue",
+    "blvd": "boulevard",
+    "ln": "lane",
+    "pk": "pike",
+    "pke": "pike",
+    "hwy": "highway",
+    "ct": "court",
+    "pl": "place",
+    "pkwy": "parkway",
+    "cir": "circle",
 }
 DIRECTIONS = {
-    "n": "north", "s": "south", "e": "east", "w": "west",
-    "nw": "northwest", "ne": "northeast", "sw": "southwest", "se": "southeast",
+    "n": "north",
+    "s": "south",
+    "e": "east",
+    "w": "west",
+    "nw": "northwest",
+    "ne": "northeast",
+    "sw": "southwest",
+    "se": "southeast",
 }
 DIRECTION_WORDS = set(DIRECTIONS) | set(DIRECTIONS.values())
 NAME_FILLER = {
-    "bellhaven", "the", "of", "at", "senior", "living", "care", "center", "centre",
-    "community", "communities", "home",
+    "bellhaven",
+    "the",
+    "of",
+    "at",
+    "senior",
+    "living",
+    "care",
+    "center",
+    "centre",
+    "community",
+    "communities",
+    "home",
 }
 CARE_MAP = {
     "Short-Term Rehabilitation & Nursing": "Skilled Nursing",
@@ -40,7 +65,7 @@ def norm_street(s: str) -> str:
     out = []
     for i, w in enumerate(words):
         if w == "st":
-            rest = words[i + 1:]
+            rest = words[i + 1 :]
             out.append("street" if all(r in DIRECTION_WORDS for r in rest) else "saint")
         else:
             out.append(STREET_TOKENS.get(w) or DIRECTIONS.get(w) or w)
@@ -81,4 +106,9 @@ def map_care(label: str) -> str:
 
 
 def full_address(street: str, city: str, state: str, zip: str) -> tuple[str, str, str, str]:
-    return (norm_street(street), " ".join((city or "").lower().split()), (state or "").strip().upper(), norm_zip(zip))
+    return (
+        norm_street(street),
+        " ".join((city or "").lower().split()),
+        (state or "").strip().upper(),
+        norm_zip(zip),
+    )

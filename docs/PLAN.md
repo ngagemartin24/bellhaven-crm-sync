@@ -83,14 +83,17 @@ def test_street_abbreviations():
     assert norm_street("4850 NW Sylvania Ave") == "4850 northwest sylvania avenue"
     assert norm_street("2401 Wilmington Pk") == "2401 wilmington pike"
 
+
 def test_st_is_street_or_saint():
     assert norm_street("45 St Lawrence Dr") == "45 saint lawrence drive"
     assert norm_street("341 Chestnut St") == "341 chestnut street"
     assert norm_street("1250 NW Franklin St") == norm_street("1250 Northwest Franklin Street")
 
+
 def test_po_box():
     assert is_po_box("PO Box 517") and is_po_box("P.O. Box 9") and is_po_box("p o box 12")
     assert not is_po_box("12 Box Elder Rd")
+
 
 def test_phone_zip_care():
     assert norm_phone("(260) 589-2589") == norm_phone("+1 260.589.2589") == "2605892589"
@@ -99,12 +102,21 @@ def test_phone_zip_care():
     assert map_care("Memory Support") == "Memory Care"
     assert map_care("Assisted Living") == "Assisted Living"
 
-def test_name_tokens_drop_filler():
-    assert name_tokens("Bellhaven Rehabilitation & Nursing of Grove City") == {"rehabilitation", "and", "nursing", "grove", "city"}
 
-def test_entities_and_spaces():   # Review Focus 5
+def test_name_tokens_drop_filler():
+    assert name_tokens("Bellhaven Rehabilitation & Nursing of Grove City") == {
+        "rehabilitation",
+        "and",
+        "nursing",
+        "grove",
+        "city",
+    }
+
+
+def test_entities_and_spaces():  # Review Focus 5
     assert clean_text("Bellhaven\xa0of  Tiffin ") == "Bellhaven of Tiffin"
     assert clean_text("Rehabilitation &amp; Nursing") == "Rehabilitation & Nursing"
+
 
 @given(st.text())
 def test_norm_street_idempotent(s):
@@ -134,29 +146,46 @@ Page structure (all 35 pages): `<h1>` name; `<dl class="detail">` with `<dt>` `A
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-def test_finds_all_35_including_findlay(): 
+def test_finds_all_35_including_findlay():
     r = scrape(fake_fetcher(SITE), BASE)
     assert r.found == 35 and r.stated == 35 and r.complete and r.directory_ended
     assert "bellhaven-meadows-of-findlay" in {l.slug for l in r.locations}
 
+
 def test_parses_tiffin():
     l = by_slug(scrape(fake_fetcher(SITE), BASE), "bellhaven-of-tiffin")
-    assert (l.name, l.street, l.city, l.state, l.zip) == ("Bellhaven of Tiffin", "45 St Lawrence Dr", "Tiffin", "OH", "44883")
-    assert l.offerings == ("Short-Term Rehabilitation & Nursing",) and l.administrator == "Walt Osei" and l.phone == "(260) 589-2589"
+    assert (l.name, l.street, l.city, l.state, l.zip) == (
+        "Bellhaven of Tiffin",
+        "45 St Lawrence Dr",
+        "Tiffin",
+        "OH",
+        "44883",
+    )
+    assert (
+        l.offerings == ("Short-Term Rehabilitation & Nursing",)
+        and l.administrator == "Walt Osei"
+        and l.phone == "(260) 589-2589"
+    )
+
 
 def test_failed_page_is_incomplete():
     r = scrape(fake_fetcher(SITE, fail={"/communities/bellhaven-of-tiffin"}), BASE)
     assert not r.complete and r.pages_failed == ["/communities/bellhaven-of-tiffin"]
 
+
 def test_invalid_page_is_incomplete():
-    r = scrape(fake_fetcher(SITE, replace={"/communities/bellhaven-of-tiffin": "<h1>Bellhaven of Tiffin</h1>"}), BASE)
+    r = scrape(
+        fake_fetcher(SITE, replace={"/communities/bellhaven-of-tiffin": "<h1>Bellhaven of Tiffin</h1>"}), BASE
+    )
     assert not r.complete and r.invalid == ["bellhaven-of-tiffin"]
 
-def test_short_count_is_incomplete():   # a directory link removed, home still says 35
+
+def test_short_count_is_incomplete():  # a directory link removed, home still says 35
     r = scrape(fake_fetcher(SITE, replace={"/communities?page=3": PAGE3_MINUS_ONE}), BASE)
     assert r.found == 34 and not r.complete and "stated 35" in r.reason
 
-def test_real_sale_is_complete():       # home says 34 and 34 are found
+
+def test_real_sale_is_complete():  # home says 34 and 34 are found
     r = scrape(fake_fetcher(SITE, replace={"/": HOME_SAYS_34, "/communities?page=3": PAGE3_MINUS_ONE}), BASE)
     assert r.found == 34 and r.stated == 34 and r.complete
 ```
@@ -185,17 +214,27 @@ def test_real_sale_is_complete():       # home says 34 and 34 are found
 ```python
 def test_read_only_client_refuses_every_write():
     c = CrmClient("http://x", "t")
-    for call in (lambda: c.patch_account("a", {}), lambda: c.patch_contact("c", {}),
-                 lambda: c.create_account({}), lambda: c.create_contact({})):
-        with pytest.raises(ReadOnlyError): call()
+    for call in (
+        lambda: c.patch_account("a", {}),
+        lambda: c.patch_contact("c", {}),
+        lambda: c.create_account({}),
+        lambda: c.create_contact({}),
+    ):
+        with pytest.raises(ReadOnlyError):
+            call()
 
-def test_pagination_reads_until_short_page(): # session stub returns 200 + 200 + 7 records
+
+def test_pagination_reads_until_short_page():  # session stub returns 200 + 200 + 7 records
     assert len(CrmClient("http://x", "t", session=PagingStub([200, 200, 7])).list_accounts()) == 407
+
 
 def test_error_carries_detail_not_token():
     with pytest.raises(CrmError) as e:
-        CrmClient("http://x", "SECRET", read_only=False, session=ErrorStub(422, {"detail": "bad field"})).create_account({})
+        CrmClient(
+            "http://x", "SECRET", read_only=False, session=ErrorStub(422, {"detail": "bad field"})
+        ).create_account({})
     assert e.value.status == 422 and "bad field" in str(e.value) and "SECRET" not in str(e.value)
+
 
 def test_fake_loads_snapshot_and_derives_parent_name():
     f = FakeCrm.from_snapshot(SNAP)
@@ -240,61 +279,87 @@ def test_fake_loads_snapshot_and_derives_parent_name():
 - [ ] **Step 1: Write the failing tests** (fixtures: scraped snapshot + CRM snapshot; ids by suffix)
 
 ```python
-@pytest.mark.parametrize("slug,group,band_", [
-    ("bellhaven-of-maplewood", ["J8DYYV"], "High"),
-    ("bellhaven-of-ashtabula", ["EPSLSV"], "Medium"),
-    ("bellhaven-of-owosso", ["2ZTRE6", "15UA71"], "High"),
-    ("bellhaven-gardens-of-monroe", ["AGG1S5", "LA9HTX", "KM4FHM"], "High"),
-    ("bellhaven-of-kettering", ["CAE2X4", "RXS09J", "ALS9GP"], "High"),
-    ("bellhaven-of-port-clinton", ["KB8932", "LTSN24"], "High"),
-    ("bellhaven-shores-of-erie", ["YHN220", "SZLZHH"], "High"),
-])
+@pytest.mark.parametrize(
+    "slug,group,band_",
+    [
+        ("bellhaven-of-maplewood", ["J8DYYV"], "High"),
+        ("bellhaven-of-ashtabula", ["EPSLSV"], "Medium"),
+        ("bellhaven-of-owosso", ["2ZTRE6", "15UA71"], "High"),
+        ("bellhaven-gardens-of-monroe", ["AGG1S5", "LA9HTX", "KM4FHM"], "High"),
+        ("bellhaven-of-kettering", ["CAE2X4", "RXS09J", "ALS9GP"], "High"),
+        ("bellhaven-of-port-clinton", ["KB8932", "LTSN24"], "High"),
+        ("bellhaven-shores-of-erie", ["YHN220", "SZLZHH"], "High"),
+    ],
+)
 def test_groups(slug, group, band_):
-    m = MATCHES[slug]; assert suffixes(m.group) == set(group) and m.band == band_
+    m = MATCHES[slug]
+    assert suffixes(m.group) == set(group) and m.band == band_
+
 
 def test_look_alikes():
-    assert MATCHES["bellhaven-at-union-square"].group == [] and suffixes(c.account_id for c in MATCHES["bellhaven-at-union-square"].lows) == {"RLLJ9P"}
-    assert "10RGY5" not in all_candidate_suffixes("amberly-manor")      # Colorado
+    assert MATCHES["bellhaven-at-union-square"].group == [] and suffixes(
+        c.account_id for c in MATCHES["bellhaven-at-union-square"].lows
+    ) == {"RLLJ9P"}
+    assert "10RGY5" not in all_candidate_suffixes("amberly-manor")  # Colorado
     assert "RES536" not in all_candidate_suffixes("bellhaven-of-carlisle")  # New Carlisle, OH
-    assert MATCHES["bellhaven-of-maplewood"].lows == []                  # 2DJ971 suppressed
+    assert MATCHES["bellhaven-of-maplewood"].lows == []  # 2DJ971 suppressed
+
 
 def test_new_locations_have_no_match():
     for s in ("bellhaven-of-batavia", "bellhaven-of-carlisle", "amberly-manor", "bellhaven-at-union-square"):
         assert MATCHES[s].group == []
 
+
 def test_no_conflicts_today():
     assert all(m.conflicts == [] for m in MATCHES.values())
 
+
 def test_state_conflict_is_reported():  # same street+zip, different state
-    m = match_location(loc_with(state="MI", slug="bellhaven-of-tiffin"), ACCOUNTS, CONTACTS_BY_ACCOUNT, ELIGIBLE)
+    m = match_location(
+        loc_with(state="MI", slug="bellhaven-of-tiffin"), ACCOUNTS, CONTACTS_BY_ACCOUNT, ELIGIBLE
+    )
     assert m.group == [] and m.conflicts
 
-def test_care_type_splits_a_duplicate_group():   # §7.5
+
+def test_care_type_splits_a_duplicate_group():  # §7.5
     odd = dict(acct("LTSN24"), care_type="Independent Living")
-    m = match_location(LOC["bellhaven-of-port-clinton"], replace(ACCOUNTS, odd), CONTACTS_BY_ACCOUNT, ELIGIBLE)
+    m = match_location(
+        LOC["bellhaven-of-port-clinton"], replace(ACCOUNTS, odd), CONTACTS_BY_ACCOUNT, ELIGIBLE
+    )
     assert suffixes(m.group) == {"KB8932"} and m.conflicts
 
-def test_money_and_billing_rule():     # Review Focus 2
+
+def test_money_and_billing_rule():  # Review Focus 2
     assert money("5200") == 5200 and money(None) == 0 and money("") == 0
     assert needs_chow(acct("WSXZZB")) and needs_chow(acct("CRBLFT")) and needs_chow(acct("Z2LGDM"))
-    assert not needs_chow(acct("9MB6KL")) and not needs_chow(acct("YCZ4YM")) and not needs_chow(acct("CAE2X4"))
+    assert (
+        not needs_chow(acct("9MB6KL")) and not needs_chow(acct("YCZ4YM")) and not needs_chow(acct("CAE2X4"))
+    )
 
-def test_band_rules_live_in_rules():          # SC-7, F1
+
+def test_band_rules_live_in_rules():  # SC-7, F1
     assert band(sig(street=True, city=True)) == "High"
     assert band(sig(street=False, city=True, phone=True)) == "Medium"
     assert band(sig(street=False, city=True, name=0.6)) == "Low"
-    assert band(sig(city=True, zip=True)) is None          # same town is not a match
+    assert band(sig(city=True, zip=True)) is None  # same town is not a match
     assert not hasattr(match_module, "band")
 
-def test_successor_cases():                     # §8.6, consistency E4
+
+def test_successor_cases():  # §8.6, consistency E4
     assert successor_case(acct("Z2LGDM"), [acct("63BVK3")], None, set()) == ("sold_chow", full_id("63BVK3"))
     assert successor_case(acct("7DTQP7"), [], None, set()) == ("gone", None)
-    assert successor_case(acct("Z2LGDM"), [dict(acct("63BVK3"), status="Inactive")], None, set()) == ("attention", None)
+    assert successor_case(acct("Z2LGDM"), [dict(acct("63BVK3"), status="Inactive")], None, set()) == (
+        "attention",
+        None,
+    )
     assert successor_case(acct("Z2LGDM"), [acct("63BVK3")], None, {full_id("63BVK3")}) == ("wait", None)
+
 
 def test_eligibility_excludes_retired_and_parents():
     a = dict(acct("WSXZZB"), chow_current_account="X")
-    assert not eligible(a, ACCOUNTS, set()) and not eligible(acct_by_name("Bellhaven Senior Living (Parent Account)"), ACCOUNTS, set())
+    assert not eligible(a, ACCOUNTS, set()) and not eligible(
+        acct_by_name("Bellhaven Senior Living (Parent Account)"), ACCOUNTS, set()
+    )
 ```
 
 - [ ] **Step 2: Run** `uv run pytest tests/test_match.py -v`. Expected: FAIL.
@@ -334,82 +399,147 @@ Task 4 conftest additions: `LOC` (slug → Location from the snapshot scrape), `
 
 ```python
 def test_card_counts_by_section():
-    assert Counter(c.section for c in CARDS) == {"Change of ownership": 3, "Duplicates": 5, "Wrong parent": 4,
-        "New accounts": 4, "Gone from the website": 2, "Possible matches": 1, "Renames": 7, "Details": 16}
+    assert Counter(c.section for c in CARDS) == {
+        "Change of ownership": 3,
+        "Duplicates": 5,
+        "Wrong parent": 4,
+        "New accounts": 4,
+        "Gone from the website": 2,
+        "Possible matches": 1,
+        "Renames": 7,
+        "Details": 16,
+    }
+
 
 def test_tiffin_change_of_ownership_shape():
     c = card(kind="chow", slug="bellhaven-of-tiffin")
-    assert [(s.method, s.path) for s in c.steps] == [("POST", "/accounts"), ("POST", "/contacts"), ("PATCH", f"/accounts/{full_id('WSXZZB')}")]
+    assert [(s.method, s.path) for s in c.steps] == [
+        ("POST", "/accounts"),
+        ("POST", "/contacts"),
+        ("PATCH", f"/accounts/{full_id('WSXZZB')}"),
+    ]
     assert c.steps[0].body["name"] == "Bellhaven of Tiffin" and c.steps[0].body["parent_id"] == OPERATOR_ID
-    assert c.steps[1].body["name"] == "Walt Osei" and c.steps[2].body == {"chow_current_account": {"$created": 1}}
+    assert c.steps[1].body["name"] == "Walt Osei" and c.steps[2].body == {
+        "chow_current_account": {"$created": 1}
+    }
     assert c.steps[2].note_append is None
+
 
 def test_sandusky_points_at_millstone_only():
     c = card(kind="chow", account="Z2LGDM")
     assert c.steps[0].body == {"chow_current_account": full_id("63BVK3")} and c.steps[0].note_append is None
 
+
 def test_direct_reparents():
     assert card(kind="wrong_parent", account="9MB6KL").steps[0].body == {"parent_id": OPERATOR_ID}
-    assert card(kind="wrong_parent", account="CAE2X4").steps[0].body == {"parent_id": OPERATOR_ID, "name": "Bellhaven of Kettering"}
-    assert not any(c for c in CARDS if suffixes(c.account_ids) & {"4R00CD", "6FNN8V", "EKKA3T"} and c.kind in ("chow", "wrong_parent"))
+    assert card(kind="wrong_parent", account="CAE2X4").steps[0].body == {
+        "parent_id": OPERATOR_ID,
+        "name": "Bellhaven of Kettering",
+    }
+    assert not any(
+        c
+        for c in CARDS
+        if suffixes(c.account_ids) & {"4R00CD", "6FNN8V", "EKKA3T"} and c.kind in ("chow", "wrong_parent")
+    )
+
 
 def test_owosso_duplicate_moves_tricia():
     c = card(kind="duplicates", slug="bellhaven-of-owosso")
     assert ("PATCH", f"/contacts/{contact_id('Tricia Lindqvist')}") in [(s.method, s.path) for s in c.steps]
 
+
 def test_gone_cards_and_note():
     gone = [c for c in CARDS if c.kind == "gone"]
     assert suffixes(a for c in gone for a in c.account_ids) == {"7DTQP7", "HWR7QE"}
-    assert gone[0].steps[0].note_append == "[Bellhaven sync 2026-11-07] Not listed on Bellhaven's website as of 2026-11-07; no other CRM account at this address. Confirm closure or sale before re-parenting."
+    assert (
+        gone[0].steps[0].note_append
+        == "[Bellhaven sync 2026-11-07] Not listed on Bellhaven's website as of 2026-11-07; no other CRM account at this address. Confirm closure or sale before re-parenting."
+    )
+
 
 def test_steps_carry_what_was_reviewed():
     lima = card(kind="wrong_parent", account="9MB6KL").steps[0].expect["fields"]
     assert lima == {"parent_id": HARBORVIEW_ID, "lifetime_revenue": 47000, "outstanding_ar": 0, "note": ""}
     tiffin_ptr = card(kind="chow", slug="bellhaven-of-tiffin").steps[2].expect["fields"]
-    assert tiffin_ptr == {"chow_current_account": "", "duplicate_of_account": "", "parent_id": CEDAR_TRAIL_ID,
-                          "lifetime_revenue": 84000, "outstanding_ar": 12400}
+    assert tiffin_ptr == {
+        "chow_current_account": "",
+        "duplicate_of_account": "",
+        "parent_id": CEDAR_TRAIL_ID,
+        "lifetime_revenue": 84000,
+        "outstanding_ar": 12400,
+    }
     goshen = card(kind="details", account="NRLNME").steps[0].expect["fields"]
     assert goshen == {"phone": "(517) 409-8156"}
+
 
 def test_retirement_is_one_change_per_loser():
     c = card(kind="duplicates", slug="bellhaven-gardens-of-monroe")
     assert sorted((ch.kind, suffix(ch.record), suffix(ch.value)) for ch in c.changes) == [
-        ("retire_duplicate", "KM4FHM", "AGG1S5"), ("retire_duplicate", "LA9HTX", "AGG1S5")]
+        ("retire_duplicate", "KM4FHM", "AGG1S5"),
+        ("retire_duplicate", "LA9HTX", "AGG1S5"),
+    ]
+
 
 def test_details_never_rewrite_spelling_or_po_box():
     bodies = [s.body for c in CARDS if c.kind == "details" for s in c.steps]
     assert not any("billing_street" in b for b in bodies)
     assert card(kind="details", account="L09P4F").steps[0].body == {"billing_zip": "45662"}
 
+
 def test_union_square_alternatives_share_a_group():
-    new, pm = card(kind="new_account", slug="bellhaven-at-union-square"), card(kind="possible_match", slug="bellhaven-at-union-square")
+    new, pm = (
+        card(kind="new_account", slug="bellhaven-at-union-square"),
+        card(kind="possible_match", slug="bellhaven-at-union-square"),
+    )
     assert new.alt_group == pm.alt_group is not None
 
-def test_incomplete_scrape_builds_no_gone_cards():
-    assert not any(c.kind == "gone" for c in propose(incomplete(REPORT), ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set()).cards)
 
-def test_conflict_becomes_attention_card():   # §8.8
-    cards = propose(report_with(loc_with(state="MI", slug="bellhaven-of-tiffin")), ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set()).cards
+def test_incomplete_scrape_builds_no_gone_cards():
+    assert not any(
+        c.kind == "gone"
+        for c in propose(incomplete(REPORT), ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set()).cards
+    )
+
+
+def test_conflict_becomes_attention_card():  # §8.8
+    cards = propose(
+        report_with(loc_with(state="MI", slug="bellhaven-of-tiffin")),
+        ACCOUNTS,
+        CONTACTS,
+        OPERATOR_ID,
+        DAY,
+        set(),
+        set(),
+    ).cards
     a = [c for c in cards if c.location_slug == "bellhaven-of-tiffin"]
     assert [c.kind for c in a] == ["attention"] and a[0].steps == ()
 
-def test_decided_field_never_rides_in_a_body():   # round 3, P3
-    rejected_phone = Change("set_field", full_id("NRLNME"), "phone", "(330) 405-6040", "bellhaven-of-goshen").key
+
+def test_decided_field_never_rides_in_a_body():  # round 3, P3
+    rejected_phone = Change(
+        "set_field", full_id("NRLNME"), "phone", "(330) 405-6040", "bellhaven-of-goshen"
+    ).key
     moved = replace(ACCOUNTS, dict(acct("NRLNME"), billing_street="1600 College Avenue"))
     p = propose(REPORT, moved, CONTACTS, OPERATOR_ID, DAY, set(), set(), frozenset({rejected_phone}))
     [d] = [c for c in p.cards if c.kind == "details" and full_id("NRLNME") in c.account_ids]
     assert d.steps[0].body == {"billing_street": "1610 College Ave"}
 
+
 def test_verdicts_classify_all_35_and_leftovers():  # brief item 2, consistency E1
     v = {x.subject: x.verdict for x in PROPOSAL.verdicts}
     assert len(v) == 38
-    assert [s for s, x in v.items() if x == "Confident match"] == sorted_slugs_of_unchanged_rows()   # the 9 of §9.1 row 1
+    assert [
+        s for s, x in v.items() if x == "Confident match"
+    ] == sorted_slugs_of_unchanged_rows()  # the 9 of §9.1 row 1
     assert v["bellhaven-of-ashtabula"] == "Medium match, nothing to change"
     assert v[full_id("Z2LGDM")] == "Sold" and v[full_id("7DTQP7")] == "Gone from the website"
     assert v["bellhaven-of-batavia"] == "New" and v["bellhaven-of-tiffin"] == "Match, needs a fix"
 
+
 def test_money_never_written():
-    assert not any(k in s.body for c in CARDS for s in c.steps for k in ("lifetime_revenue", "outstanding_ar"))
+    assert not any(
+        k in s.body for c in CARDS for s in c.steps for k in ("lifetime_revenue", "outstanding_ar")
+    )
 ```
 
 Task 5 conftest additions: `REPORT` (snapshot scrape), `PROPOSAL = propose(REPORT, ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set())`, `CARDS = PROPOSAL.cards`, `card(kind, slug=None, account=None) -> Card` (exactly one match), `report_with(loc) -> ScrapeReport` (snapshot with that location replaced), `incomplete(report) -> ScrapeReport`, `sorted_slugs_of_unchanged_rows()`.
@@ -440,72 +570,117 @@ Task 5 conftest additions: `REPORT` (snapshot scrape), `PROPOSAL = propose(REPOR
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-def test_first_run_records_42(tmp_path):        # test_ledger.py
-    s = run_once(FETCH, FakeCrm.from_snapshot(SNAP), Ledger(tmp_path/"d.db"), PARENT, DAY)
+def test_first_run_records_42(tmp_path):  # test_ledger.py
+    s = run_once(FETCH, FakeCrm.from_snapshot(SNAP), Ledger(tmp_path / "d.db"), PARENT, DAY)
     assert s.complete and sum(s.by_section.values()) == 42
 
+
 def test_second_run_same_cards_same_ids(tmp_path):
-    l = Ledger(tmp_path/"d.db"); crm = FakeCrm.from_snapshot(SNAP)
-    run_once(FETCH, crm, l, PARENT, DAY); ids = {c.id for c in l.cards("pending")}
+    l = Ledger(tmp_path / "d.db")
+    crm = FakeCrm.from_snapshot(SNAP)
+    run_once(FETCH, crm, l, PARENT, DAY)
+    ids = {c.id for c in l.cards("pending")}
     s = run_once(FETCH, crm, l, PARENT, DAY)
     assert {c.id for c in l.cards("pending")} == ids and s.counts["new"] == 0
 
-def test_rejected_never_returns(tmp_path):      # test_rerun.py
-    l, crm = fresh(tmp_path); run_once(FETCH, crm, l, PARENT, DAY)
-    pm = only(l.cards("pending"), kind="possible_match"); l.decide(pm.id, "rejected"); l.set_status(pm.id, "pending", "rejected")
+
+def test_rejected_never_returns(tmp_path):  # test_rerun.py
+    l, crm = fresh(tmp_path)
+    run_once(FETCH, crm, l, PARENT, DAY)
+    pm = only(l.cards("pending"), kind="possible_match")
+    l.decide(pm.id, "rejected")
+    l.set_status(pm.id, "pending", "rejected")
     run_once(FETCH, crm, l, PARENT, DAY)
     assert not [c for c in l.cards("pending") if c.kind == "possible_match"]
 
+
 def test_regrouped_rejection_stays_rejected(tmp_path):
-    crm = FakeCrm.from_snapshot(SNAP); crm.patch_account_raw(full_id("NRLNME"), {"billing_street": "1600 College Avenue"})
-    l = Ledger(tmp_path/"d.db"); run_once(FETCH, crm, l, PARENT, DAY)
-    d = only(l.cards("pending"), kind="details", account="NRLNME"); assert {"phone", "billing_street"} <= set(d.steps[0].body)
-    l.decide(d.id, "rejected"); l.set_status(d.id, "pending", "rejected")
+    crm = FakeCrm.from_snapshot(SNAP)
+    crm.patch_account_raw(full_id("NRLNME"), {"billing_street": "1600 College Avenue"})
+    l = Ledger(tmp_path / "d.db")
+    run_once(FETCH, crm, l, PARENT, DAY)
+    d = only(l.cards("pending"), kind="details", account="NRLNME")
+    assert {"phone", "billing_street"} <= set(d.steps[0].body)
+    l.decide(d.id, "rejected")
+    l.set_status(d.id, "pending", "rejected")
     crm.patch_account_raw(full_id("NRLNME"), {"billing_street": "1610 College Avenue"})
     run_once(FETCH, crm, l, PARENT, DAY)
     assert not [c for c in l.cards("pending") if full_id("NRLNME") in c.account_ids]
 
-def test_monroe_retirement_returns_whole(tmp_path):    # §10.2, round 3 P5
-    l, crm = fresh(tmp_path); run_once(FETCH, crm, l, PARENT, DAY)
-    m = only(l.cards("pending"), kind="duplicates", slug="bellhaven-gardens-of-monroe"); l.decide(m.id, "rejected"); l.set_status(m.id, "pending", "rejected")
-    crm.patch_account_raw(full_id("KM4FHM"), {"lifetime_revenue": 1})        # KM4FHM now survives (billing first)
+
+def test_monroe_retirement_returns_whole(tmp_path):  # §10.2, round 3 P5
+    l, crm = fresh(tmp_path)
+    run_once(FETCH, crm, l, PARENT, DAY)
+    m = only(l.cards("pending"), kind="duplicates", slug="bellhaven-gardens-of-monroe")
+    l.decide(m.id, "rejected")
+    l.set_status(m.id, "pending", "rejected")
+    crm.patch_account_raw(full_id("KM4FHM"), {"lifetime_revenue": 1})  # KM4FHM now survives (billing first)
     run_once(FETCH, crm, l, PARENT, DAY)
     m2 = only(l.cards("pending"), kind="duplicates", slug="bellhaven-gardens-of-monroe")
-    assert {suffix(s.path.rsplit("/", 1)[1]): s.body for s in m2.steps if s.path.startswith("/accounts/")} == {
+    assert {
+        suffix(s.path.rsplit("/", 1)[1]): s.body for s in m2.steps if s.path.startswith("/accounts/")
+    } == {
         "LA9HTX": {"duplicate_of_account": full_id("KM4FHM"), "status": "Inactive"},
-        "AGG1S5": {"duplicate_of_account": full_id("KM4FHM"), "status": "Inactive"}}
-    [move] = [s for s in m2.steps if s.path.startswith("/contacts/")]       # Elaine Vogel leaves AGG1S5
+        "AGG1S5": {"duplicate_of_account": full_id("KM4FHM"), "status": "Inactive"},
+    }
+    [move] = [s for s in m2.steps if s.path.startswith("/contacts/")]  # Elaine Vogel leaves AGG1S5
     assert move.path.endswith(contact_id("Elaine Vogel")) and move.body == {"account_id": full_id("KM4FHM")}
 
-def test_prior_rejection_is_linked(tmp_path):            # §10.3 step 4
-    l, crm = fresh(tmp_path); run_once(FETCH, crm, l, PARENT, DAY)
-    d = only(l.cards("pending"), kind="details", account="NRLNME"); l.decide(d.id, "rejected"); l.set_status(d.id, "pending", "rejected")
-    run_once(fake_fetcher(SITE, replace={"/communities/bellhaven-of-goshen": goshen_with_phone("(330) 405-9999")}), crm, l, PARENT, DAY)
-    assert only(l.cards("pending"), kind="details", account="NRLNME").prior_rejections[0]["value"] == "(330) 405-6040"
+
+def test_prior_rejection_is_linked(tmp_path):  # §10.3 step 4
+    l, crm = fresh(tmp_path)
+    run_once(FETCH, crm, l, PARENT, DAY)
+    d = only(l.cards("pending"), kind="details", account="NRLNME")
+    l.decide(d.id, "rejected")
+    l.set_status(d.id, "pending", "rejected")
+    run_once(
+        fake_fetcher(SITE, replace={"/communities/bellhaven-of-goshen": goshen_with_phone("(330) 405-9999")}),
+        crm,
+        l,
+        PARENT,
+        DAY,
+    )
+    assert (
+        only(l.cards("pending"), kind="details", account="NRLNME").prior_rejections[0]["value"]
+        == "(330) 405-6040"
+    )
+
 
 def test_run_records_verdicts(tmp_path):
-    l, crm = fresh(tmp_path); s = run_once(FETCH, crm, l, PARENT, DAY)
+    l, crm = fresh(tmp_path)
+    s = run_once(FETCH, crm, l, PARENT, DAY)
     assert len(s.verdicts) == 38 and len(l.verdicts()) == 38
 
+
 def test_crm_read_failure_leaves_ledger_untouched(tmp_path):
-    l = Ledger(tmp_path/"d.db"); crm = FakeCrm.from_snapshot(SNAP); crm.fail_next("GET", 500, "down")
-    with pytest.raises(RunAborted): run_once(FETCH, crm, l, PARENT, DAY)
+    l = Ledger(tmp_path / "d.db")
+    crm = FakeCrm.from_snapshot(SNAP)
+    crm.fail_next("GET", 500, "down")
+    with pytest.raises(RunAborted):
+        run_once(FETCH, crm, l, PARENT, DAY)
     assert l.latest_run() is None and l.cards() == []
 
-def test_operator_must_exist_exactly_once(tmp_path):
-    with pytest.raises(RunAborted): run_once(FETCH, FakeCrm.from_snapshot(SNAP), Ledger(tmp_path/"d.db"), "No Such Parent", DAY)
 
-def test_incomplete_run_blocks_gone_cards(tmp_path):   # test_guard.py
-    l, crm = fresh(tmp_path); run_once(FETCH, crm, l, PARENT, DAY)
+def test_operator_must_exist_exactly_once(tmp_path):
+    with pytest.raises(RunAborted):
+        run_once(FETCH, FakeCrm.from_snapshot(SNAP), Ledger(tmp_path / "d.db"), "No Such Parent", DAY)
+
+
+def test_incomplete_run_blocks_gone_cards(tmp_path):  # test_guard.py
+    l, crm = fresh(tmp_path)
+    run_once(FETCH, crm, l, PARENT, DAY)
     s = run_once(fake_fetcher(SITE, fail={"/communities/bellhaven-of-tiffin"}), crm, l, PARENT, DAY)
     assert not s.complete and s.counts["superseded"] == 0
     assert {c.status for c in l.cards() if c.kind == "gone"} == {"blocked"}
     run_once(FETCH, crm, l, PARENT, DAY)
     assert {c.status for c in l.cards() if c.kind == "gone"} == {"pending"}
 
+
 def test_already_inactive_operator_account_gets_no_card(tmp_path):
-    crm = FakeCrm.from_snapshot(SNAP); crm.patch_account_raw(full_id("7DTQP7"), {"status": "Inactive"})
-    l = Ledger(tmp_path/"d.db"); run_once(FETCH, crm, l, PARENT, DAY)
+    crm = FakeCrm.from_snapshot(SNAP)
+    crm.patch_account_raw(full_id("7DTQP7"), {"status": "Inactive"})
+    l = Ledger(tmp_path / "d.db")
+    run_once(FETCH, crm, l, PARENT, DAY)
     assert not [c for c in l.cards() if full_id("7DTQP7") in c.account_ids]
 ```
 
@@ -533,98 +708,150 @@ def test_already_inactive_operator_account_gets_no_card(tmp_path):
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-def test_end_state(tmp_path):                       # test_end_state.py
-    l, crm = fresh(tmp_path); run_once(FETCH, crm, l, PARENT, DAY)
-    pm = only(l.cards("pending"), kind="possible_match"); reject(pm.id, pm.version, l)
-    for c in l.cards("pending"): assert approve(c.id, c.version, l, crm).status == "done"
-    assert diff_against_expected(crm, SNAP, EXPECTED) == []      # helper shared with scripts/verify.py
+def test_end_state(tmp_path):  # test_end_state.py
+    l, crm = fresh(tmp_path)
+    run_once(FETCH, crm, l, PARENT, DAY)
+    pm = only(l.cards("pending"), kind="possible_match")
+    reject(pm.id, pm.version, l)
+    for c in l.cards("pending"):
+        assert approve(c.id, c.version, l, crm).status == "done"
+    assert diff_against_expected(crm, SNAP, EXPECTED) == []  # helper shared with scripts/verify.py
     assert len(crm.list_accounts()) == 127 and len(crm.list_contacts()) == 73
     assert run_once(FETCH, crm, l, PARENT, DAY).counts["new"] == 0
+
 
 def test_old_chow_accounts_get_one_write_only(tmp_path):
     l, crm = end_state(tmp_path)
     for s in ("WSXZZB", "CRBLFT", "Z2LGDM"):
         assert [list(b) for (m, p, b) in crm.writes if p.endswith(full_id(s))] == [["chow_current_account"]]
 
-def test_failure_then_retry_no_second_create(tmp_path):   # test_apply.py
-    c = chow_card("bellhaven-of-tiffin"); crm.fail_next("POST", 500, "boom", after=1)  # step 1 succeeds, step 2 fails
-    r = approve(c.id, c.version, l, crm); assert r.status == "failed" and r.message.startswith("Failed at step 2 of 3")
+
+def test_failure_then_retry_no_second_create(tmp_path):  # test_apply.py
+    c = chow_card("bellhaven-of-tiffin")
+    crm.fail_next("POST", 500, "boom", after=1)  # step 1 succeeds, step 2 fails
+    r = approve(c.id, c.version, l, crm)
+    assert r.status == "failed" and r.message.startswith("Failed at step 2 of 3")
     assert retry(c.id, l, crm).status == "done"
     assert sum(1 for a in crm.list_accounts() if a["name"] == "Bellhaven of Tiffin") == 1
 
+
 def test_lost_post_reconciles_without_reposting(tmp_path):
-    c = new_card("bellhaven-of-batavia"); crm.lose_next_response("POST")
+    c = new_card("bellhaven-of-batavia")
+    crm.lose_next_response("POST")
     assert approve(c.id, c.version, l, crm).status == "needs-reconciliation"
-    assert discard(c.id, l).status == "refused"          # the POST landed: a write exists
+    assert discard(c.id, l).status == "refused"  # the POST landed: a write exists
     assert check_again(c.id, l, crm).status == "done"
     assert sum(1 for (m, p, _) in crm.writes if m == "POST" and p == "/accounts") == 1
 
-def test_changed_phone_stops_before_writing(tmp_path):    # round 2, N1
-    c = details_card("NRLNME"); crm.patch_account_raw(full_id("NRLNME"), {"phone": "(330) 555-0123"})
+
+def test_changed_phone_stops_before_writing(tmp_path):  # round 2, N1
+    c = details_card("NRLNME")
+    crm.patch_account_raw(full_id("NRLNME"), {"phone": "(330) 555-0123"})
     r = approve(c.id, c.version, l, crm)
-    assert r.status == "failed" and "phone is now (330) 555-0123, not (517) 409-8156" in r.message and crm.writes == []
+    assert (
+        r.status == "failed"
+        and "phone is now (330) 555-0123, not (517) 409-8156" in r.message
+        and crm.writes == []
+    )
     assert discard(c.id, l).status == "done" and run_once(FETCH, crm, l, PARENT, DAY).counts["new"] >= 1
 
+
 def test_new_ar_stops_reparent(tmp_path):
-    c = wrong_parent_card("9MB6KL"); crm.patch_account_raw(full_id("9MB6KL"), {"outstanding_ar": 100})
-    r = approve(c.id, c.version, l, crm); assert r.status == "failed" and "outstanding_ar" in r.message and crm.writes == []
+    c = wrong_parent_card("9MB6KL")
+    crm.patch_account_raw(full_id("9MB6KL"), {"outstanding_ar": 100})
+    r = approve(c.id, c.version, l, crm)
+    assert r.status == "failed" and "outstanding_ar" in r.message and crm.writes == []
+
 
 def test_created_elsewhere_stops_create(tmp_path):
-    c = new_card("bellhaven-of-batavia"); crm.add_account(batavia_record_under_operator())
+    c = new_card("bellhaven-of-batavia")
+    crm.add_account(batavia_record_under_operator())
     assert approve(c.id, c.version, l, crm).status == "failed" and crm.writes == []
 
+
 def test_half_done_chow_reserves_both_accounts(tmp_path):
-    c = chow_card("bellhaven-of-tiffin"); crm.fail_next("PATCH", 500, "boom")  # steps 1-2 (POSTs) succeed, step 3 fails
+    c = chow_card("bellhaven-of-tiffin")
+    crm.fail_next("PATCH", 500, "boom")  # steps 1-2 (POSTs) succeed, step 3 fails
     approve(c.id, c.version, l, crm)
     assert discard(c.id, l).status == "refused"
     run_once(FETCH, crm, l, PARENT, DAY)
-    assert not [x for x in l.cards("pending") if x.location_slug == "bellhaven-of-tiffin" or full_id("WSXZZB") in x.account_ids]
+    assert not [
+        x
+        for x in l.cards("pending")
+        if x.location_slug == "bellhaven-of-tiffin" or full_id("WSXZZB") in x.account_ids
+    ]
 
-def test_cleared_ar_stops_chow_before_any_create(tmp_path):   # round 3, R3-3
-    c = chow_card("bellhaven-of-tiffin"); crm.patch_account_raw(full_id("WSXZZB"), {"outstanding_ar": 0})
-    r = approve(c.id, c.version, l, crm); assert r.status == "failed" and "outstanding_ar" in r.message and crm.writes == []
 
-def test_same_second_create_is_adopted(tmp_path):            # round 3, R3-2
-    c = new_card("bellhaven-of-batavia"); crm.lose_next_response("POST"); crm.freeze_clock("2026-11-07 23:00:00Z")
-    approve(c.id, c.version, l, crm); assert check_again(c.id, l, crm).status == "done"
+def test_cleared_ar_stops_chow_before_any_create(tmp_path):  # round 3, R3-3
+    c = chow_card("bellhaven-of-tiffin")
+    crm.patch_account_raw(full_id("WSXZZB"), {"outstanding_ar": 0})
+    r = approve(c.id, c.version, l, crm)
+    assert r.status == "failed" and "outstanding_ar" in r.message and crm.writes == []
 
-def test_uncertain_discard_waits_ten_minutes(tmp_path):      # §11 step 5
-    c = new_card("bellhaven-of-batavia"); crm.drop_next_write("POST"); t0 = utcnow()
+
+def test_same_second_create_is_adopted(tmp_path):  # round 3, R3-2
+    c = new_card("bellhaven-of-batavia")
+    crm.lose_next_response("POST")
+    crm.freeze_clock("2026-11-07 23:00:00Z")
+    approve(c.id, c.version, l, crm)
+    assert check_again(c.id, l, crm).status == "done"
+
+
+def test_uncertain_discard_waits_ten_minutes(tmp_path):  # §11 step 5
+    c = new_card("bellhaven-of-batavia")
+    crm.drop_next_write("POST")
+    t0 = utcnow()
     assert approve(c.id, c.version, l, crm).status == "needs-reconciliation"
     assert check_again(c.id, l, crm, now=lambda: t0 + timedelta(minutes=5)).message == "Not found yet"
     assert discard(c.id, l, now=lambda: t0 + timedelta(minutes=5)).status == "refused"
     check_again(c.id, l, crm, now=lambda: t0 + timedelta(minutes=11))
     assert discard(c.id, l, now=lambda: t0 + timedelta(minutes=11)).status == "done"
 
-def test_discard_refused_after_account_landed(tmp_path):    # round 4, R4-1
-    c = new_card("bellhaven-of-batavia"); crm.drop_next_write("POST", after=1); t0 = utcnow()   # account lands, contact uncertain
+
+def test_discard_refused_after_account_landed(tmp_path):  # round 4, R4-1
+    c = new_card("bellhaven-of-batavia")
+    crm.drop_next_write("POST", after=1)
+    t0 = utcnow()  # account lands, contact uncertain
     assert approve(c.id, c.version, l, crm).status == "needs-reconciliation"
     check_again(c.id, l, crm, now=lambda: t0 + timedelta(minutes=11))
     assert discard(c.id, l, now=lambda: t0 + timedelta(minutes=11)).status == "refused"
 
-def test_rejected_write_shape_stops_cleanly(tmp_path):    # Review Focus 1
-    crm.reject_fields({"care_type"}); c = new_card("bellhaven-of-batavia")
+
+def test_rejected_write_shape_stops_cleanly(tmp_path):  # Review Focus 1
+    crm.reject_fields({"care_type"})
+    c = new_card("bellhaven-of-batavia")
     r = approve(c.id, c.version, l, crm)
     assert r.status == "failed" and "Failed at step 1 of 2" in r.message and crm.writes == []
 
-def test_two_alternatives_one_wins(tmp_path):              # test_alternatives.py
-    new, pm = union_square_cards(); l2 = Ledger(l.path)
+
+def test_two_alternatives_one_wins(tmp_path):  # test_alternatives.py
+    new, pm = union_square_cards()
+    l2 = Ledger(l.path)
     ops = [l.claim(new.id, new.version), l2.claim(pm.id, pm.version)]
     assert sum(op is not None for op in ops) == 1
 
-def test_owner_retries_and_finishes(tmp_path):           # round 3, P5
-    new, pm = union_square_cards(); crm.fail_next("POST", 500, "boom")
+
+def test_owner_retries_and_finishes(tmp_path):  # round 3, P5
+    new, pm = union_square_cards()
+    crm.fail_next("POST", 500, "boom")
     assert approve(new.id, new.version, l, crm).status == "failed"
     assert retry(new.id, l, crm).status == "done" and l.card(pm.id).status == "superseded"
 
-def test_rejecting_every_choice_raises_attention(tmp_path):   # §10.6, consistency E3
-    new, pm = union_square_cards(); reject(pm.id, pm.version, l); reject(new.id, new.version, l)
-    assert [c.kind for c in l.cards("pending") if c.location_slug == "bellhaven-at-union-square"] == ["attention"]
 
-def test_owner_retries_and_discard_reopens(tmp_path):     # round 2, N4
-    new, pm = union_square_cards(); crm.fail_next("POST", 422, "bad field")
+def test_rejecting_every_choice_raises_attention(tmp_path):  # §10.6, consistency E3
+    new, pm = union_square_cards()
+    reject(pm.id, pm.version, l)
+    reject(new.id, new.version, l)
+    assert [c.kind for c in l.cards("pending") if c.location_slug == "bellhaven-at-union-square"] == [
+        "attention"
+    ]
+
+
+def test_owner_retries_and_discard_reopens(tmp_path):  # round 2, N4
+    new, pm = union_square_cards()
+    crm.fail_next("POST", 422, "bad field")
     assert approve(new.id, new.version, l, crm).status == "failed"
-    assert approve(pm.id, pm.version, l, crm).status == "refused"       # group owned by the new-account operation
+    assert approve(pm.id, pm.version, l, crm).status == "refused"  # group owned by the new-account operation
     assert discard(new.id, l).status == "done" and l.card(pm.id).status == "pending"
     new2 = only(run_after(l, crm), kind="new_account", slug="bellhaven-at-union-square")
     assert approve(new2.id, new2.version, l, crm).status == "done" and l.card(pm.id).status == "superseded"
@@ -633,16 +860,21 @@ def test_owner_retries_and_discard_reopens(tmp_path):     # round 2, N4
 Shared fixtures in `tests/conftest.py` (added in this task): `fresh(tmp_path) -> (Ledger, FakeCrm)`; `end_state(tmp_path) -> (Ledger, FakeCrm)` = the flow of `test_end_state` up to the approvals; `chow_card`, `new_card`, `wrong_parent_card`, `details_card`, `union_square_cards` return the pending `CardRow`s after one `run_once`; `run_after(l, crm)` runs `run_once` and returns the pending cards.
 
 ```python
-def test_crash_after_post_reconciles(tmp_path):          # test_restart.py; round 3, R3-1
-    c = new_card("bellhaven-of-batavia"); crm.crash_after_write("POST")
-    with pytest.raises(SimulatedCrash): approve(c.id, c.version, l, crm)
+def test_crash_after_post_reconciles(tmp_path):  # test_restart.py; round 3, R3-1
+    c = new_card("bellhaven-of-batavia")
+    crm.crash_after_write("POST")
+    with pytest.raises(SimulatedCrash):
+        approve(c.id, c.version, l, crm)
     assert Ledger(l.path).recover_interrupted() == {"needs-reconciliation": 1, "failed": 0}
     assert check_again(c.id, l, crm).status == "done"
     assert sum(1 for (m, p, _) in crm.writes if m == "POST" and p == "/accounts") == 1
 
+
 def test_crash_between_patches_retries(tmp_path):
-    c = chow_card_existing("Z2LGDM"); crm.crash_after_write("PATCH")
-    with pytest.raises(SimulatedCrash): approve(c.id, c.version, l, crm)
+    c = chow_card_existing("Z2LGDM")
+    crm.crash_after_write("PATCH")
+    with pytest.raises(SimulatedCrash):
+        approve(c.id, c.version, l, crm)
     assert Ledger(l.path).recover_interrupted() == {"needs-reconciliation": 0, "failed": 1}
     assert retry(c.id, l, crm).status == "done"
 ```
@@ -679,57 +911,105 @@ def test_queue_shows_sections_in_order(client):
     assert [h for h in SECTIONS if h in html][:8] == list(SECTIONS[:8])
     assert "42 proposals" in html and "35 of 35 locations" in html
 
+
 def test_card_shows_evidence_and_writes(client):
     html = client.get("/?location=bellhaven-of-tiffin").text
-    assert "$84,000" in html and "$12,400" in html and "POST /accounts" in html and "chow_current_account" in html
+    assert (
+        "$84,000" in html
+        and "$12,400" in html
+        and "POST /accounts" in html
+        and "chow_current_account" in html
+    )
 
-def test_approve_then_already_decided(client):     # Review Focus 3
+
+def test_approve_then_already_decided(client):  # Review Focus 3
     c = pending(kind="rename", slug="bellhaven-rehabilitation-nursing-of-grove-city")
-    r = client.post(f"/cards/{c.id}/approve", data={"csrf": client.cookies["bh_csrf"], "version": c.version}, follow_redirects=True)
+    r = client.post(
+        f"/cards/{c.id}/approve",
+        data={"csrf": client.cookies["bh_csrf"], "version": c.version},
+        follow_redirects=True,
+    )
     assert "Approved: 1 of 1 writes done" in r.text
     r2 = client.post(f"/cards/{c.id}/approve", data={"csrf": client.cookies["bh_csrf"], "version": c.version})
     assert r2.status_code == 409 and len(FAKE.writes) == 1
 
+
 def test_interrupted_apply_offers_retry(tmp_path):
-    l = ledger_with_card_in("applying", tmp_path); client = TestClient(create_app(CFG, l, lambda: FAKE, lambda: DAY))
+    l = ledger_with_card_in("applying", tmp_path)
+    client = TestClient(create_app(CFG, l, lambda: FAKE, lambda: DAY))
     assert "Interrupted; Retry resumes" in client.get("/").text and ">Retry<" in client.get("/").text
     c = l.cards("failed")[0]
-    assert client.post(f"/cards/{c.id}/retry", data={"csrf": client.cookies["bh_csrf"], "version": c.version}, follow_redirects=True).status_code == 200
-    assert l.card(c.id).status == "done"                                      # consistency E5
+    assert (
+        client.post(
+            f"/cards/{c.id}/retry",
+            data={"csrf": client.cookies["bh_csrf"], "version": c.version},
+            follow_redirects=True,
+        ).status_code
+        == 200
+    )
+    assert l.card(c.id).status == "done"  # consistency E5
 
-def test_actions_from_allowed_states_only(client):     # test_actions.py; round 3, P1
+
+def test_actions_from_allowed_states_only(client):  # test_actions.py; round 3, P1
     failed, recon = card_in_status("failed"), card_in_status("needs-reconciliation")
     tok = client.cookies["bh_csrf"]
-    assert client.post(f"/cards/{failed.id}/discard", data={"csrf": tok, "version": failed.version}).status_code == 303
-    assert client.post(f"/cards/{recon.id}/check-again", data={"csrf": tok, "version": recon.version}).status_code == 303
+    assert (
+        client.post(f"/cards/{failed.id}/discard", data={"csrf": tok, "version": failed.version}).status_code
+        == 303
+    )
+    assert (
+        client.post(
+            f"/cards/{recon.id}/check-again", data={"csrf": tok, "version": recon.version}
+        ).status_code
+        == 303
+    )
     p = any_pending()
     assert client.post(f"/cards/{p.id}/retry", data={"csrf": tok, "version": p.version}).status_code == 409
 
-def test_locations_page(client):                      # test_locations.py; brief item 2
-    html = client.get("/locations").text
-    assert html.count('class="verdict') == 38 and "Confident match" in html and "Medium match, nothing to change" in html
 
-def test_history_shows_before_values(client):          # §13, consistency E4
+def test_locations_page(client):  # test_locations.py; brief item 2
+    html = client.get("/locations").text
+    assert (
+        html.count('class="verdict') == 38
+        and "Confident match" in html
+        and "Medium match, nothing to change" in html
+    )
+
+
+def test_history_shows_before_values(client):  # §13, consistency E4
     c = pending(kind="details", account="NRLNME")
     client.post(f"/cards/{c.id}/approve", data={"csrf": client.cookies["bh_csrf"], "version": c.version})
     assert "(517) 409-8156" in client.get("/history").text
 
-def test_second_app_refuses(tmp_path):
-    create_app(CFG_AT(tmp_path), Ledger(tmp_path/"d.db"), lambda: FAKE, lambda: DAY)
-    with pytest.raises(AppLockedError): create_app(CFG_AT(tmp_path), Ledger(tmp_path/"d.db"), lambda: FAKE, lambda: DAY)
 
-def test_csrf_cookie_not_secure(client):          # Review Focus 4
+def test_second_app_refuses(tmp_path):
+    create_app(CFG_AT(tmp_path), Ledger(tmp_path / "d.db"), lambda: FAKE, lambda: DAY)
+    with pytest.raises(AppLockedError):
+        create_app(CFG_AT(tmp_path), Ledger(tmp_path / "d.db"), lambda: FAKE, lambda: DAY)
+
+
+def test_csrf_cookie_not_secure(client):  # Review Focus 4
     set_cookie = client.get("/").headers["set-cookie"]
     assert "bh_csrf=" in set_cookie and "secure" not in set_cookie.lower()
 
-def test_post_without_token_refused(client):      # test_app_security.py
-    c = any_pending(); assert client.post(f"/cards/{c.id}/approve", data={"version": c.version}).status_code == 403
+
+def test_post_without_token_refused(client):  # test_app_security.py
+    c = any_pending()
+    assert client.post(f"/cards/{c.id}/approve", data={"version": c.version}).status_code == 403
+
 
 def test_get_cannot_write(client):
     assert client.get(f"/cards/{any_pending().id}/approve").status_code == 405
 
+
 def test_changed_version_refused(client):
-    c = any_pending(); assert client.post(f"/cards/{c.id}/approve", data={"csrf": client.cookies["bh_csrf"], "version": "stale"}).status_code == 409
+    c = any_pending()
+    assert (
+        client.post(
+            f"/cards/{c.id}/approve", data={"csrf": client.cookies["bh_csrf"], "version": "stale"}
+        ).status_code
+        == 409
+    )
 ```
 
 Task 8 conftest additions: `CFG`, `CFG_AT(tmp_path) -> Config`, `FAKE` (the FakeCrm behind `client`), `client` fixture, `pending(kind, slug=None, account=None)`, `any_pending()`, `card_in_status(status) -> CardRow` (drives a card there through the fake: `failed` via `fail_next`, `needs-reconciliation` via `drop_next_write`), `ledger_with_card_in(status, tmp_path) -> Ledger`.
@@ -756,16 +1036,23 @@ Task 8 conftest additions: `CFG`, `CFG_AT(tmp_path) -> Config`, `FAKE` (the Fake
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-def test_run_prints_banner(monkeypatch, tmp_path, capsys):   # wires fake fetcher + FakeCrm via monkeypatch of cli._dependencies
+def test_run_prints_banner(
+    monkeypatch, tmp_path, capsys
+):  # wires fake fetcher + FakeCrm via monkeypatch of cli._dependencies
     out = capsys.readouterr().out if main(["run"]) == 0 else ""
     assert "42 proposals" in out and "Confident match" in out and "bellhaven-meadows-of-findlay" in out
+
 
 def test_serve_refuses_public_host():
     assert main(["serve", "--host", "0.0.0.0"]) == 2
 
+
 def test_flag_from_json(tmp_path):
-    (tmp_path/"f.json").write_text(json.dumps([{"card_id": CARD_ID, "reason": "check Sandusky"}]))
-    assert main(["flag", "--from-json", str(tmp_path/"f.json")]) == 0 and LEDGER.card(CARD_ID).flag == "check Sandusky"
+    (tmp_path / "f.json").write_text(json.dumps([{"card_id": CARD_ID, "reason": "check Sandusky"}]))
+    assert (
+        main(["flag", "--from-json", str(tmp_path / "f.json")]) == 0
+        and LEDGER.card(CARD_ID).flag == "check Sandusky"
+    )
 ```
 
 - [ ] **Step 2: Run** `uv run pytest tests/test_cli.py -v`. Expected: FAIL.
@@ -790,25 +1077,35 @@ def test_flag_from_json(tmp_path):
 
 ```python
 def test_verify_passes_on_expected_state(tmp_path):
-    l, crm = end_state(tmp_path); assert verify_main(crm) == 0
+    l, crm = end_state(tmp_path)
+    assert verify_main(crm) == 0
+
 
 def test_verify_reports_a_mismatch(tmp_path, capsys):
-    l, crm = end_state(tmp_path); crm.patch_account_raw(full_id("NRLNME"), {"phone": "(000) 000-0000"})
+    l, crm = end_state(tmp_path)
+    crm.patch_account_raw(full_id("NRLNME"), {"phone": "(000) 000-0000"})
     assert verify_main(crm) == 1 and full_id("NRLNME") in capsys.readouterr().out
 
+
 def test_compare_flags_disagreement(tmp_path):
-    answers = expected_answers(); answers["locations"]["bellhaven-at-union-square"]["outcome"] = "match"
-    compare(answers, l); assert only(l.cards("pending"), kind="possible_match").flag
+    answers = expected_answers()
+    answers["locations"]["bellhaven-at-union-square"]["outcome"] = "match"
+    compare(answers, l)
+    assert only(l.cards("pending"), kind="possible_match").flag
+
 
 @pytest.mark.e2e
 def test_approve_reject_rerun(page, live_app):
-    page.goto(live_app.url); page.click("text=Renames")
+    page.goto(live_app.url)
+    page.click("text=Renames")
     page.locator("#card-" + GROVE_CITY_RENAME).locator("text=Approve").click()
     expect(page.locator("text=Approved: 1 of 1 writes done")).to_be_visible()
     page.locator("#card-" + UNION_SQUARE_PM).locator("text=Reject").click()
-    live_app.run_once(); page.reload()
+    live_app.run_once()
+    page.reload()
     expect(page.locator("#card-" + UNION_SQUARE_PM)).to_have_count(0)
-    page.goto(live_app.url + "/history"); expect(page.locator("text=Rejected")).to_be_visible()
+    page.goto(live_app.url + "/history")
+    expect(page.locator("text=Rejected")).to_be_visible()
 ```
 
 - [ ] **Step 2: Run** `uv run pytest tests/test_verify.py tests/test_blind_check.py -v` and `uv run playwright install chromium && uv run pytest -m e2e -v`. Expected: FAIL.

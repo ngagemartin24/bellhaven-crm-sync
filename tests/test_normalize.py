@@ -39,7 +39,11 @@ def test_phone_zip_care():
 
 def test_name_tokens_drop_filler():
     assert name_tokens("Bellhaven Rehabilitation & Nursing of Grove City") == {
-        "rehabilitation", "and", "nursing", "grove", "city",
+        "rehabilitation",
+        "and",
+        "nursing",
+        "grove",
+        "city",
     }
 
 

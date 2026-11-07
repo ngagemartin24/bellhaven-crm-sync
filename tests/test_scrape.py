@@ -6,8 +6,10 @@ from bellhaven_sync.scrape import scrape
 
 SITE = Path(__file__).parent / "fixtures" / "snapshot" / "site"
 BASE = "https://example.test"
-PAGE3_MINUS_ONE = (SITE / "communities-page-3.html").read_text().replace(
-    '<a href="/communities/bellhaven-of-chesterton">', "<a>"
+PAGE3_MINUS_ONE = (
+    (SITE / "communities-page-3.html")
+    .read_text()
+    .replace('<a href="/communities/bellhaven-of-chesterton">', "<a>")
 )
 HOME_SAYS_34 = (SITE / "home.html").read_text().replace("serve 35 communities", "serve 34 communities")
 
@@ -25,7 +27,11 @@ def test_finds_all_35_including_findlay():
 def test_parses_tiffin():
     loc = by_slug(scrape(fake_fetcher(SITE), BASE), "bellhaven-of-tiffin")
     assert (loc.name, loc.street, loc.city, loc.state, loc.zip) == (
-        "Bellhaven of Tiffin", "45 St Lawrence Dr", "Tiffin", "OH", "44883",
+        "Bellhaven of Tiffin",
+        "45 St Lawrence Dr",
+        "Tiffin",
+        "OH",
+        "44883",
     )
     assert loc.offerings == ("Short-Term Rehabilitation & Nursing",)
     assert loc.administrator == "Walt Osei" and loc.phone == "(260) 589-2589"
@@ -38,7 +44,9 @@ def test_failed_page_is_incomplete():
 
 
 def test_invalid_page_is_incomplete():
-    r = scrape(fake_fetcher(SITE, replace={"/communities/bellhaven-of-tiffin": "<h1>Bellhaven of Tiffin</h1>"}), BASE)
+    r = scrape(
+        fake_fetcher(SITE, replace={"/communities/bellhaven-of-tiffin": "<h1>Bellhaven of Tiffin</h1>"}), BASE
+    )
     assert not r.complete and r.invalid == ["bellhaven-of-tiffin"]
 
 

@@ -52,9 +52,12 @@ def test_monroe_retirement_returns_whole(tmp_path):  # 10.2, round 3 P5
     crm.patch_account_raw(full_id("KM4FHM"), {"lifetime_revenue": 1})  # KM4FHM now survives (billing first)
     run_once(FETCH, crm, l, PARENT, DAY)
     m2 = only(l.cards("pending"), kind="duplicates", slug="bellhaven-gardens-of-monroe")
-    assert {suffix(s.path.rsplit("/", 1)[1]): s.body for s in m2.steps if s.path.startswith("/accounts/")} == {
+    assert {
+        suffix(s.path.rsplit("/", 1)[1]): s.body for s in m2.steps if s.path.startswith("/accounts/")
+    } == {
         "LA9HTX": {"duplicate_of_account": full_id("KM4FHM"), "status": "Inactive"},
-        "AGG1S5": {"duplicate_of_account": full_id("KM4FHM"), "status": "Inactive"}}
+        "AGG1S5": {"duplicate_of_account": full_id("KM4FHM"), "status": "Inactive"},
+    }
     [move] = [s for s in m2.steps if s.path.startswith("/contacts/")]  # Elaine Vogel leaves AGG1S5
     assert move.path.endswith(contact_id("Elaine Vogel")) and move.body == {"account_id": full_id("KM4FHM")}
 
@@ -63,7 +66,9 @@ def test_prior_rejection_is_linked(tmp_path):  # 10.3 step 4
     l, crm = fresh(tmp_path)
     run_once(FETCH, crm, l, PARENT, DAY)
     reject(l, only(l.cards("pending"), kind="details", account="NRLNME"))
-    new_site = fake_fetcher(SITE, replace={"/communities/bellhaven-of-goshen": goshen_with_phone("(330) 405-9999")})
+    new_site = fake_fetcher(
+        SITE, replace={"/communities/bellhaven-of-goshen": goshen_with_phone("(330) 405-9999")}
+    )
     run_once(new_site, crm, l, PARENT, DAY)
     d = only(l.cards("pending"), kind="details", account="NRLNME")
     assert d.prior_rejections[0]["value"] == "(330) 405-6040"
