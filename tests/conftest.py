@@ -353,3 +353,20 @@ def ledger_with_card_in(status, tmp_path):
     c = only(l.cards("pending"), kind="details", account="NRLNME")
     assert l.claim(c.id, c.version) is not None
     return l
+
+
+def expected_answers() -> dict:
+    """The blind check's answer key in its own vocabulary, written by hand from DESIGN section 9."""
+    raw = json.loads((Path(__file__).parent / "fixtures" / "blind_expected.json").read_text())
+    locs = {}
+    for slug, a in raw["locations"].items():
+        locs[slug] = {
+            **a,
+            "account_ids": sorted(full_id(s) for s in a["account_ids"]),
+            "survivor": full_id(a["survivor"]) if a["survivor"] else None,
+        }
+    left = {
+        full_id(s): {**a, "target": full_id(a["target"]) if a["target"] else None}
+        for s, a in raw["leftovers"].items()
+    }
+    return {"locations": locs, "leftovers": left}

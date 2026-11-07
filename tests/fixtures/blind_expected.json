@@ -1,0 +1,333 @@
+{
+ "_source": "Written by hand from docs/DESIGN.md section 9; ids are the last six characters.",
+ "locations": {
+  "bellhaven-of-maplewood": {
+   "outcome": "match",
+   "account_ids": [
+    "J8DYYV"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-new-carlisle": {
+   "outcome": "match",
+   "account_ids": [
+    "RES536"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-wooster": {
+   "outcome": "match",
+   "account_ids": [
+    "MRP58M"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-terrace-of-akron": {
+   "outcome": "match",
+   "account_ids": [
+    "4R00CD"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-saline": {
+   "outcome": "match",
+   "account_ids": [
+    "TVYRC4"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-meadville": {
+   "outcome": "match",
+   "account_ids": [
+    "EKKA3T"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-woods-of-toledo": {
+   "outcome": "match",
+   "account_ids": [
+    "U3RMM5"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-kalamazoo": {
+   "outcome": "match",
+   "account_ids": [
+    "JLPQ20"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-court-of-altoona": {
+   "outcome": "match",
+   "account_ids": [
+    "MF81C8"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-ashtabula": {
+   "outcome": "match",
+   "account_ids": [
+    "EPSLSV"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-goshen": {
+   "outcome": "fix",
+   "account_ids": [
+    "NRLNME"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-defiance": {
+   "outcome": "fix",
+   "account_ids": [
+    "6FNN8V"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-marion": {
+   "outcome": "fix",
+   "account_ids": [
+    "47ZZP7"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-portsmouth": {
+   "outcome": "fix",
+   "account_ids": [
+    "L09P4F"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-rehabilitation-nursing-of-grove-city": {
+   "outcome": "fix",
+   "account_ids": [
+    "6K5BGN"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": "Bellhaven Rehabilitation & Nursing of Grove City"
+  },
+  "bellhaven-at-sycamore-ridge": {
+   "outcome": "fix",
+   "account_ids": [
+    "71SZ34"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": "Bellhaven at Sycamore Ridge"
+  },
+  "the-arbors-at-bellhaven-dayton": {
+   "outcome": "fix",
+   "account_ids": [
+    "NTZVDA"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": "The Arbors at Bellhaven - Dayton"
+  },
+  "bellhaven-healthcare-centre-of-ashland": {
+   "outcome": "fix",
+   "account_ids": [
+    "ZN5HX5"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": "Bellhaven Healthcare Centre of Ashland"
+  },
+  "bellhaven-of-chagrin-falls": {
+   "outcome": "fix",
+   "account_ids": [
+    "C1Q0G7"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": "Bellhaven of Chagrin Falls"
+  },
+  "bellhaven-willow-creek": {
+   "outcome": "fix",
+   "account_ids": [
+    "DS8WQZ"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": "Bellhaven Willow Creek"
+  },
+  "bellhaven-of-chesterton": {
+   "outcome": "fix",
+   "account_ids": [
+    "Z8DXEG"
+   ],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": "Bellhaven of Chesterton"
+  },
+  "bellhaven-crossings-of-lima": {
+   "outcome": "fix",
+   "account_ids": [
+    "9MB6KL"
+   ],
+   "survivor": null,
+   "parent_action": "reparent",
+   "rename_to": null
+  },
+  "bellhaven-of-zanesville": {
+   "outcome": "fix",
+   "account_ids": [
+    "6D5VUF"
+   ],
+   "survivor": null,
+   "parent_action": "reparent",
+   "rename_to": "Bellhaven of Zanesville"
+  },
+  "bellhaven-meadows-of-findlay": {
+   "outcome": "fix",
+   "account_ids": [
+    "YCZ4YM"
+   ],
+   "survivor": null,
+   "parent_action": "reparent",
+   "rename_to": null
+  },
+  "bellhaven-of-tiffin": {
+   "outcome": "fix",
+   "account_ids": [
+    "WSXZZB"
+   ],
+   "survivor": null,
+   "parent_action": "chow_new",
+   "rename_to": null
+  },
+  "bellhaven-of-marietta": {
+   "outcome": "fix",
+   "account_ids": [
+    "CRBLFT"
+   ],
+   "survivor": null,
+   "parent_action": "chow_new",
+   "rename_to": null
+  },
+  "bellhaven-of-port-clinton": {
+   "outcome": "fix",
+   "account_ids": [
+    "KB8932",
+    "LTSN24"
+   ],
+   "survivor": "KB8932",
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-shores-of-erie": {
+   "outcome": "fix",
+   "account_ids": [
+    "YHN220",
+    "SZLZHH"
+   ],
+   "survivor": "YHN220",
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-gardens-of-monroe": {
+   "outcome": "fix",
+   "account_ids": [
+    "AGG1S5",
+    "LA9HTX",
+    "KM4FHM"
+   ],
+   "survivor": "AGG1S5",
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-owosso": {
+   "outcome": "fix",
+   "account_ids": [
+    "2ZTRE6",
+    "15UA71"
+   ],
+   "survivor": "2ZTRE6",
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-kettering": {
+   "outcome": "fix",
+   "account_ids": [
+    "CAE2X4",
+    "RXS09J",
+    "ALS9GP"
+   ],
+   "survivor": "CAE2X4",
+   "parent_action": "reparent",
+   "rename_to": "Bellhaven of Kettering"
+  },
+  "bellhaven-of-batavia": {
+   "outcome": "new",
+   "account_ids": [],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-of-carlisle": {
+   "outcome": "new",
+   "account_ids": [],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "amberly-manor": {
+   "outcome": "new",
+   "account_ids": [],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  },
+  "bellhaven-at-union-square": {
+   "outcome": "new",
+   "account_ids": [],
+   "survivor": null,
+   "parent_action": "none",
+   "rename_to": null
+  }
+ },
+ "leftovers": {
+  "Z2LGDM": {
+   "outcome": "chow_existing",
+   "target": "63BVK3"
+  },
+  "7DTQP7": {
+   "outcome": "needs_review",
+   "target": null
+  },
+  "HWR7QE": {
+   "outcome": "needs_review",
+   "target": null
+  }
+ }
+}
