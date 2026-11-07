@@ -150,6 +150,19 @@ def successor_case(
     return ("sold_chow" if needs_chow(old) else "sold_duplicate", buyers[0]["account_id"])
 
 
+# ---- location verdicts (13), in the order the Locations page and `run` print them ----------------------
+VERDICTS = (
+    "Confident match",
+    "Medium match, nothing to change",
+    "Match, needs a fix",
+    "Possible match only",
+    "New",
+    "Gone from the website",
+    "Sold",
+    "Needs attention",
+)
+
+
 # ---- review sections (8.1) ------------------------------------------------------------------------------
 SECTIONS = (
     "Change of ownership",

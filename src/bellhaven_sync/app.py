@@ -394,16 +394,7 @@ def create_app(
             rows.append(
                 {"v": v, "fixes": fixes, "links": [(a, View(cfg, ledger).crm_link(a)) for a in v.account_ids]}
             )
-        order = [
-            "Confident match",
-            "Medium match, nothing to change",
-            "Match, needs a fix",
-            "Possible match only",
-            "New",
-            "Gone from the website",
-            "Sold",
-            "Needs attention",
-        ]
+        order = rules.VERDICTS
         return page(
             request,
             "locations.html",

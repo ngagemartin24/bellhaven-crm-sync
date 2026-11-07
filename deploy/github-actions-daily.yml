@@ -1,0 +1,51 @@
+# The same daily run as a GitHub Actions workflow. It lives in deploy/, not .github/workflows/, so it never runs;
+# copy it to .github/workflows/ to use it. Because each Actions run starts on a clean machine, the decision
+# ledger (decisions.db) is kept on a `state` branch between runs: without it, a re-run could not tell which
+# proposals were already decided. The review app still runs on a reviewer's machine against the same ledger.
+name: bellhaven-daily-run
+
+on:
+  schedule:
+    - cron: "30 11 * * *" # 11:30 UTC, 06:30 US Eastern in winter
+  workflow_dispatch:
+
+concurrency:
+  group: bellhaven-daily-run
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+
+      - run: uv sync --frozen
+
+      - name: Restore the decision ledger from the state branch
+        run: |
+          if git fetch --depth 1 origin state; then
+            git show FETCH_HEAD:decisions.db > decisions.db
+          fi
+
+      - name: Run (reads the website and the CRM, records proposals; never writes to the CRM)
+        env:
+          BELLHAVEN_CRM_TOKEN: ${{ secrets.BELLHAVEN_CRM_TOKEN }}
+        run: uv run bellhaven-sync run
+
+      - name: Save the decision ledger to the state branch
+        run: |
+          mkdir -p /tmp/state && cp decisions.db /tmp/state/
+          git config user.name "bellhaven-sync"
+          git config user.email "bellhaven-sync@users.noreply.github.com"
+          git checkout --orphan state-new
+          git rm -rf --cached . > /dev/null
+          cp /tmp/state/decisions.db decisions.db
+          git add -f decisions.db
+          git commit -m "ledger after run ${{ github.run_id }}"
+          git push -f origin state-new:state

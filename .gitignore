@@ -11,3 +11,5 @@ __pycache__/
 .ruff_cache/
 .hypothesis/
 .taste-skill/
+*.db.lock
+.run.lock

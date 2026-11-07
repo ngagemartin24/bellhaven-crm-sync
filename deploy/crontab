@@ -1,0 +1,6 @@
+# Bellhaven CRM sync: the daily run. Install with `crontab deploy/crontab` on a server whose clock is UTC.
+# 11:30 UTC is 06:30 US Eastern in winter and 07:30 in summer, so proposals are waiting when the team starts.
+# The run only reads the website and the CRM and records proposals; nothing reaches the CRM until a person
+# approves it in the review app. flock skips a run while the previous one is still going.
+# The CRM key comes from the environment: put BELLHAVEN_CRM_TOKEN=... in /opt/bellhaven-crm-sync/.env (git-ignored).
+30 11 * * * cd /opt/bellhaven-crm-sync && mkdir -p logs && flock -n .run.lock uv run bellhaven-sync run >> logs/run.log 2>&1
