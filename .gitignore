@@ -1,0 +1,12 @@
+.env
+*.db
+*.db-wal
+*.db-shm
+logs/
+.venv/
+blind/
+.superpowers/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/

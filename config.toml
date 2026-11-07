@@ -1,0 +1,7 @@
+# Non-secret settings. The CRM key comes only from BELLHAVEN_CRM_TOKEN or a git-ignored .env file.
+site_url = "https://analyst-assessment-production.up.railway.app"
+crm_url = "https://analyst-assessment-production.up.railway.app/api/v1"
+# The CRM browser's account page; {token} and {account_id} are filled in when the app shows a link.
+crm_browser_url = "https://analyst-assessment-production.up.railway.app/crm/{token}/accounts/{account_id}"
+operator_parent_name = "Bellhaven Senior Living (Parent Account)"
+db_path = "decisions.db"
