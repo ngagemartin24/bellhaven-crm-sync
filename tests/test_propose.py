@@ -16,6 +16,7 @@ from conftest import (
     full_id,
     incomplete,
     loc_with,
+    only,
     replace,
     report_with,
     sorted_slugs_of_unchanged_rows,
@@ -182,3 +183,11 @@ def test_evidence_is_json_ready():
     for c in CARDS:
         json.dumps(c.evidence)
         json.dumps([s.body for s in c.steps] + [s.expect for s in c.steps])
+
+
+def test_notes_keep_facility_names_cased():  # str.capitalize() would lowercase "Riverbend Manor Care Center"
+    cards = propose(REPORT, ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set()).cards
+    note = only(cards, kind="rename", account="C1Q0G7").steps[0].note_append
+    assert "Renamed from 'Riverbend Manor Care Center'" in note
+    lima = only(cards, kind="wrong_parent", account="9MB6KL").steps[0].note_append
+    assert "Moved under Bellhaven Senior Living (Parent Account) (was Harborview Care Group" in lima

@@ -46,6 +46,11 @@ class Proposal:
     verdicts: list[Verdict]
 
 
+def _sentence(text: str) -> str:
+    """First letter up, the rest untouched (str.capitalize would lowercase facility names)."""
+    return text[:1].upper() + text[1:]
+
+
 def _dollars(v) -> str:
     return f"${rules.money(v):,}"
 
@@ -415,7 +420,7 @@ class _Builder:
             f"/accounts/{aid}",
             fields,
             _patch_expect(acc, fields, ("lifetime_revenue", "outstanding_ar") if moving else (), True),
-            self.note(", ".join(what).capitalize(), why),
+            self.note(_sentence(", ".join(what)), why),
             tuple(c.key for c in own),
         )
         self.add(
