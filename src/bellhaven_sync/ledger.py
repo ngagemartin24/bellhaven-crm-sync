@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Self
 
 from .models import Card, Change, Location, Step, Verdict, digest
 from .scrape import ScrapeReport
@@ -84,7 +85,7 @@ class Ledger:
     def close(self) -> None:
         self._db.close()
 
-    def __enter__(self) -> "Ledger":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *exc) -> None:
