@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.13 via uv; requests, BeautifulSoup 4; FastAPI, Jinja2, uvicorn, python-multipart; SQLite (standard library); pytest, Hypothesis, Playwright; ruff.
 
-**Spec:** `docs/DESIGN.md` (v3 + Clarifications). Section numbers below (§8.3) refer to it. Every task's
+**Spec:** `docs/DESIGN.md` (v4 + Clarifications). Section numbers below (§8.3) refer to it. Every task's
 implementer reads the spec sections its task names.
 
 ## Global Constraints
@@ -16,7 +16,7 @@ implementer reads the spec sections its task names.
 - Python `>=3.13,<3.14` (`.python-version` = `3.13`); every command runs through `uv run`; versions locked in `uv.lock`.
 - Runtime dependencies only: `fastapi`, `jinja2`, `uvicorn`, `python-multipart`, `requests`, `beautifulsoup4`. Dev: `pytest`, `hypothesis`, `playwright`, `httpx`, `ruff`.
 - The CRM key comes only from `BELLHAVEN_CRM_TOKEN` (or a git-ignored `.env`); never in the repo, the database, a log line or an exception message.
-- **No test touches the network.** `tests/conftest.py` has an autouse fixture that makes `requests.Session.request` and `socket.create_connection` raise `RuntimeError("network disabled in tests")`; the Playwright test's loopback server is the only exception (it binds 127.0.0.1).
+- **No test touches the network.** `tests/conftest.py` has an autouse fixture that makes `requests.Session.request` and `socket.create_connection` raise `RuntimeError("network disabled in tests")` for any host other than `127.0.0.1`/`::1`, so the Playwright test's loopback server and its readiness check still work.
 - **No build step writes to the real CRM.** The only real writes are Gage's approvals in the review app.
 - Status values exactly `Active`, `Inactive`, `Needs Review`.
 - Note line exactly `[Bellhaven sync YYYY-MM-DD] <what>; <why>` (UTC run date), appended on a new line, never overwriting (§8.9).
@@ -42,14 +42,14 @@ pyproject.toml  uv.lock  .python-version  .gitignore  .env.example  config.toml
 src/bellhaven_sync/
   __init__.py   models.py   config.py   normalize.py   scrape.py   crm.py
   rules.py      match.py    propose.py  ledger.py      pipeline.py apply.py
-  verify_lib.py app.py      cli.py      templates/{base,queue,history,_card}.html   static/app.css
+  verify_lib.py app.py      cli.py      templates/{base,queue,locations,history,_card}.html   static/app.css
 scripts/verify.py   scripts/blind_check.py
 deploy/crontab      deploy/github-actions-daily.yml
 tests/conftest.py   tests/fake_crm.py   tests/fake_site.py
 tests/fixtures/snapshot/site/{home,about,communities-page-1..4}.html, site/communities/<slug>.html (35)
 tests/fixtures/snapshot/crm-accounts.json   crm-contacts.json
 tests/fixtures/expected_end_state.json
-tests/test_{normalize,scrape,crm,match,propose,ledger,rerun,guard,apply,end_state,alternatives,app,app_security,cli,verify,blind_check}.py
+tests/test_{normalize,scrape,crm,match,propose,ledger,rerun,guard,apply,restart,end_state,alternatives,app,app_security,actions,locations,cli,verify,blind_check}.py
 tests/e2e/test_review_flow.py
 README.md  WRITEUP.md  docs/{DESIGN,PLAN,code-tour,cheat-sheet,api-notes}.md
 ```
@@ -205,7 +205,7 @@ def test_fake_loads_snapshot_and_derives_parent_name():
     assert f.get_account(lima["account_id"])["parent_name"] == "Bellhaven Senior Living (Parent Account)"
 ```
 
-`full_id(suffix)` and `OPERATOR_ID` live in `tests/conftest.py` (suffix lookup over the snapshot; exactly one match or the helper raises).
+`tests/conftest.py` helpers (this task adds them; later tasks add theirs to the same file): `SNAP`, `SITE` (fixture dirs), `BASE` (site URL), `FETCH = fake_fetcher(SITE)`, `PARENT` (operator parent name), `DAY = date(2026, 11, 7)`; `full_id(suffix) -> str` (exactly one snapshot id ends with it, else raise); `suffix(id) -> str`; `suffixes(ids) -> set[str]`; `acct(suffix) -> Account`; `acct_by_name(name) -> Account`; `contact_id(name) -> str`; `OPERATOR_ID`, `HARBORVIEW_ID`, `CEDAR_TRAIL_ID`. FakeCrm test hooks also include `crash_after_write(method)` (performs the next such write, then raises `SimulatedCrash`, which apply does not catch), `drop_next_write(method)` (raises `requests.ConnectionError` without writing) and `patch_account_raw(id, fields)` (edit without logging a write).
 
 - [ ] **Step 2: Run** `uv run pytest tests/test_crm.py -v`. Expected: FAIL.
 - [ ] **Step 3: Implement** `crm.py` and `tests/fake_crm.py`.
@@ -223,6 +223,9 @@ def test_fake_loads_snapshot_and_derives_parent_name():
 **Interfaces:**
 - Produces (`rules.py`, every judgment call in one file):
   - `WEIGHTS = {"street": 50, "admin": 25, "phone": 10, "zip": 5, "city": 5}`, `NAME_MAX = 10`, `LOW_NAME_OVERLAP = 0.5`.
+  - `passes_gate(loc, acc, s: Signals) -> bool` (§7.2: same state AND one of city, ZIP, phone, administrator); `is_state_conflict(loc, acc, s) -> bool` (§7.2 second sentence); `band(s: Signals) -> str | None` (§7.4: `"High"`, `"Medium"`, `"Low"` or None).
+  - `DETAIL_FIELDS = ("phone", "billing_street", "billing_city", "billing_state", "billing_zip", "care_type")` (§8.7).
+  - `successor_case(old: Account, same_address_others: list[Account], loc_offerings: tuple[str, ...] | None, reserved: set[str]) -> tuple[str, str | None]` (§8.6): `("sold_chow", id)`, `("sold_duplicate", id)`, `("gone", None)`, `("attention", None)` or `("wait", None)`.
   - `SECTIONS: tuple[str, ...]` (Global Constraints order); `SECTION_FOR_KIND: dict[str, str]` for kinds `chow`, `duplicates`, `wrong_parent`, `new_account`, `gone`, `possible_match`, `rename`, `details`, `attention`.
   - `money(v) -> int` (int, numeric string, `None`, `""` → int; `None`/`""` → 0).
   - `needs_chow(acc: Account) -> bool` = `money(lifetime_revenue) > 0 and money(outstanding_ar) > 0`.
@@ -231,7 +234,8 @@ def test_fake_loads_snapshot_and_derives_parent_name():
   - `can_sync_street(crm_street: str, site_street: str) -> bool` (False when PO Box or abbreviation-equivalent).
   - `care_compatible(crm_care: str, loc: Location) -> bool`; `care_for_new(loc) -> str` (first offering mapped).
   - `note_line(day: date, what: str, why: str) -> str`; `GONE_WHAT = "Not listed on Bellhaven's website as of {day}"`, `GONE_WHY = "no other CRM account at this address. Confirm closure or sale before re-parenting."`.
-- Produces (`match.py`): `Signals(street: bool, admin: bool, phone: bool, zip: bool, city: bool, name: float, po_box: bool)`; `Candidate(account_id: str, signals: Signals, score: int, band: str | None)`; `LocationMatch(location: Location, group: list[str], band: str | None, lows: list[Candidate], conflicts: list[str], ruled_out: list[Candidate])`; `signals(loc, acc, contacts_by_account) -> Signals`; `band(s: Signals) -> str | None` (§7.4); `match_location(loc, accounts, contacts_by_account, eligible_ids: set[str]) -> LocationMatch`; `match_all(locations, accounts, contacts, eligible_ids) -> dict[str, LocationMatch]`; `contacts_by_account(contacts) -> dict[str, list[Contact]]` (active contacts only).
+- Produces (`models.py`): `Signals(street: bool, admin: bool, phone: bool, zip: bool, city: bool, name: float, po_box: bool)`, frozen.
+- Produces (`match.py`, no thresholds of its own; it calls `rules`): `Candidate(account_id: str, signals: Signals, score: int, band: str | None)`; `LocationMatch(location: Location, group: list[str], band: str | None, lows: list[Candidate], conflicts: list[str], ruled_out: list[Candidate])`; `signals(loc, acc, contacts_by_account) -> Signals`; `match_location(loc, accounts, contacts_by_account, eligible_ids: set[str]) -> LocationMatch`; `match_all(locations, accounts, contacts, eligible_ids) -> dict[str, LocationMatch]`; `contacts_by_account(contacts) -> dict[str, list[Contact]]` (active contacts only).
 
 - [ ] **Step 1: Write the failing tests** (fixtures: scraped snapshot + CRM snapshot; ids by suffix)
 
@@ -275,12 +279,27 @@ def test_money_and_billing_rule():     # Review Focus 2
     assert needs_chow(acct("WSXZZB")) and needs_chow(acct("CRBLFT")) and needs_chow(acct("Z2LGDM"))
     assert not needs_chow(acct("9MB6KL")) and not needs_chow(acct("YCZ4YM")) and not needs_chow(acct("CAE2X4"))
 
+def test_band_rules_live_in_rules():          # SC-7, F1
+    assert band(sig(street=True, city=True)) == "High"
+    assert band(sig(street=False, city=True, phone=True)) == "Medium"
+    assert band(sig(street=False, city=True, name=0.6)) == "Low"
+    assert band(sig(city=True, zip=True)) is None          # same town is not a match
+    assert not hasattr(match_module, "band")
+
+def test_successor_cases():                     # §8.6, consistency E4
+    assert successor_case(acct("Z2LGDM"), [acct("63BVK3")], None, set()) == ("sold_chow", full_id("63BVK3"))
+    assert successor_case(acct("7DTQP7"), [], None, set()) == ("gone", None)
+    assert successor_case(acct("Z2LGDM"), [dict(acct("63BVK3"), status="Inactive")], None, set()) == ("attention", None)
+    assert successor_case(acct("Z2LGDM"), [acct("63BVK3")], None, {full_id("63BVK3")}) == ("wait", None)
+
 def test_eligibility_excludes_retired_and_parents():
     a = dict(acct("WSXZZB"), chow_current_account="X")
     assert not eligible(a, ACCOUNTS, set()) and not eligible(acct_by_name("Bellhaven Senior Living (Parent Account)"), ACCOUNTS, set())
 ```
 
 - [ ] **Step 2: Run** `uv run pytest tests/test_match.py -v`. Expected: FAIL.
+Task 4 conftest additions: `LOC` (slug → Location from the snapshot scrape), `ACCOUNTS`, `CONTACTS`, `CONTACTS_BY_ACCOUNT`, `ELIGIBLE`, `MATCHES = match_all(...)`, `loc_with(slug, **fields) -> Location`, `replace(accounts, record) -> list[Account]` (same id swapped), `all_candidate_suffixes(slug)`, `sig(**true_fields) -> Signals`, `match_module` (the imported module).
+
 - [ ] **Step 3: Implement** `rules.py` and `match.py` exactly per §7. Score = sum of the matched signals' weights + `round(NAME_MAX * jaccard)`. The group is the High candidates sharing one full address, ordered by `survivor_sort_key`; §7.5's care-type split and Medium-beside-High conflict apply.
 - [ ] **Step 4: Run** `uv run pytest tests/test_match.py -v`. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: rules and matching`.
@@ -295,10 +314,11 @@ def test_eligibility_excludes_retired_and_parents():
 
 **Interfaces:**
 - Produces (`models.py`):
-  - `Change(kind: str, record: str, field: str, value: Any, location_slug: str)`, frozen, with `.key -> str` = `sha256(json.dumps([kind, record, field, value], sort_keys=True, separators=(",", ":")))`. Kinds (§8.1): `set_field` (record account id, field, value); `retire_duplicate` (record loser id, field `""`, value survivor id; always sets `duplicate_of_account` and `status` Inactive and moves the loser's active contacts); `set_chow` (record old account id, field `""`, value successor id or `{"created_for": slug}`); `create_account` (record `loc:<slug>`, field `""`, value = identity `{name, billing_street, billing_city, billing_state, billing_zip, parent_id, administrator}`).
-  - `Step(n: int, method: str, path: str, body: dict, expect: dict, note_append: str | None, change_keys: tuple[str, ...])`. A body value `{"$created": k}` means "the id created by step k". `expect` (§11 step 2): for a PATCH `{"fields": {<field>: <value seen at build time>}}` covering every field it writes plus the facts its decision rests on (`lifetime_revenue`, `outstanding_ar` and `parent_id` for a parent move; `parent_id`, `duplicate_of_account`, `chow_current_account` for a retirement or CHOW pointer; `account_id` for a contact move); for an account POST `{"absent_account": {"parent_id", "billing_street", "billing_city", "billing_state", "billing_zip"}}`; for a contact POST `{"absent_contact": {"account_id", "name"}}`.
-  - `Card(id: str, kind: str, section: str, title: str, summary: str, location_slug: str | None, account_ids: tuple[str, ...], band: str | None, changes: tuple[Change, ...], steps: tuple[Step, ...], evidence: dict, alt_group: str | None)`; `id` = first 12 hex of sha256 of the sorted change keys; `.change_keys -> frozenset[str]`.
-- Produces (`propose.py`): `propose(report: ScrapeReport, accounts, contacts, operator_id: str, today: date, reserved_accounts: set[str], reserved_locations: set[str]) -> list[Card]`. Pure. Drops changes already true in the CRM. Does **not** filter decided keys (the ledger does). Gone-from-the-website cards only when `report.complete`.
+  - `Change(kind: str, record: str, field: str, value: Any, location_slug: str)`, frozen, with `.key -> str` = `sha256(json.dumps([kind, record, field, value], sort_keys=True, separators=(",", ":")))`. Kinds (§8.1): `set_field` (record account id, field, value); `retire_duplicate` (record loser id, field `""`, value survivor id; always sets `duplicate_of_account` and `status` Inactive and moves the loser's active contacts); `set_chow` (record old account id, field `""`, value successor id or `{"created_for": slug}`); `create_account` (record `loc:<slug>`, field `""`, value = identity `{name, billing_street, billing_city, billing_state, billing_zip, parent_id, administrator}`); `attention` (record slug or account id, field `""`, value = sha256 of the description; no steps).
+  - `Step(n: int, method: str, path: str, body: dict, expect: dict, note_append: str | None, change_keys: tuple[str, ...])`. A body value `{"$created": k}` means "the id created by step k". `expect` (§11 step 2): for a PATCH `{"fields": {<field>: <value seen at build time>}}` covering every field it writes (`note` included when `note_append` is set) plus the facts its decision rests on (`lifetime_revenue`, `outstanding_ar` and `parent_id` for a parent move; `parent_id`, `duplicate_of_account`, `chow_current_account`, `lifetime_revenue` and `outstanding_ar` for a CHOW pointer; `parent_id`, `duplicate_of_account`, `chow_current_account` for a retirement; `account_id` for a contact move); for an account POST `{"absent_account": {"parent_id", "billing_street", "billing_city", "billing_state", "billing_zip"}}`; for a contact POST `{"absent_contact": {"account_id", "name"}}`.
+  - `Card(change_set: str, kind: str, section: str, title: str, summary: str, location_slug: str | None, account_ids: tuple[str, ...], band: str | None, changes: tuple[Change, ...], steps: tuple[Step, ...], evidence: dict, alt_group: str | None)`; `change_set` = sha256 of the sorted change keys (the card's instance id is assigned by the ledger, Task 6); `.change_keys -> frozenset[str]`.
+  - `Verdict(subject: str, name: str, verdict: str, band: str | None, account_ids: tuple[str, ...], change_sets: tuple[str, ...], reason: str)`; verdict one of `Confident match`, `Medium match, nothing to change`, `Match, needs a fix`, `Possible match only`, `New`, `Gone from the website`, `Sold`, `Needs attention` (§13).
+- Produces (`propose.py`): `propose(report: ScrapeReport, accounts, contacts, operator_id: str, today: date, reserved_accounts: set[str], reserved_locations: set[str], decided: frozenset[str] = frozenset()) -> Proposal` with `Proposal(cards: list[Card], verdicts: list[Verdict])`. Pure. Builds every candidate change, drops changes already true in the CRM and changes whose key is in `decided`, and only then groups the survivors into cards and builds their steps (§10.2), so a decided field never appears in a body. Gone-from-the-website cards only when `report.complete`.
 - Card contents per §8.2–§8.8. Exact step shapes (tests pin them):
   - **chow (new account):** 1 `POST /accounts` (site values, `parent_id` operator, `status` Active, `care_type` mapped, `note` = one note line naming the old account); 2 `POST /contacts` (`account_id {"$created": 1}`, site administrator, title `Administrator`, site phone, `is_active` true); 3 `PATCH /accounts/<old>` body exactly `{"chow_current_account": {"$created": 1}}`, `note_append` None.
   - **chow (existing successor, Sandusky):** 1 `PATCH /accounts/<old>` body exactly `{"chow_current_account": <successor>}`; 2 `PATCH /accounts/<successor>` body `{}` with `note_append`.
@@ -344,7 +364,10 @@ def test_gone_cards_and_note():
 
 def test_steps_carry_what_was_reviewed():
     lima = card(kind="wrong_parent", account="9MB6KL").steps[0].expect["fields"]
-    assert lima == {"parent_id": HARBORVIEW_ID, "lifetime_revenue": 47000, "outstanding_ar": 0}
+    assert lima == {"parent_id": HARBORVIEW_ID, "lifetime_revenue": 47000, "outstanding_ar": 0, "note": ""}
+    tiffin_ptr = card(kind="chow", slug="bellhaven-of-tiffin").steps[2].expect["fields"]
+    assert tiffin_ptr == {"chow_current_account": "", "duplicate_of_account": "", "parent_id": CEDAR_TRAIL_ID,
+                          "lifetime_revenue": 84000, "outstanding_ar": 12400}
     goshen = card(kind="details", account="NRLNME").steps[0].expect["fields"]
     assert goshen == {"phone": "(517) 409-8156"}
 
@@ -363,16 +386,33 @@ def test_union_square_alternatives_share_a_group():
     assert new.alt_group == pm.alt_group is not None
 
 def test_incomplete_scrape_builds_no_gone_cards():
-    assert not any(c.kind == "gone" for c in propose(incomplete(REPORT), ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set()))
+    assert not any(c.kind == "gone" for c in propose(incomplete(REPORT), ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set()).cards)
 
 def test_conflict_becomes_attention_card():   # §8.8
-    cards = propose(report_with(loc_with(state="MI", slug="bellhaven-of-tiffin")), ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set())
+    cards = propose(report_with(loc_with(state="MI", slug="bellhaven-of-tiffin")), ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set()).cards
     a = [c for c in cards if c.location_slug == "bellhaven-of-tiffin"]
     assert [c.kind for c in a] == ["attention"] and a[0].steps == ()
+
+def test_decided_field_never_rides_in_a_body():   # round 3, P3
+    rejected_phone = Change("set_field", full_id("NRLNME"), "phone", "(330) 405-6040", "bellhaven-of-goshen").key
+    moved = replace(ACCOUNTS, dict(acct("NRLNME"), billing_street="1600 College Avenue"))
+    p = propose(REPORT, moved, CONTACTS, OPERATOR_ID, DAY, set(), set(), frozenset({rejected_phone}))
+    [d] = [c for c in p.cards if c.kind == "details" and full_id("NRLNME") in c.account_ids]
+    assert d.steps[0].body == {"billing_street": "1610 College Ave"}
+
+def test_verdicts_classify_all_35_and_leftovers():  # brief item 2, consistency E1
+    v = {x.subject: x.verdict for x in PROPOSAL.verdicts}
+    assert len(v) == 38
+    assert [s for s, x in v.items() if x == "Confident match"] == sorted_slugs_of_unchanged_rows()   # the 9 of §9.1 row 1
+    assert v["bellhaven-of-ashtabula"] == "Medium match, nothing to change"
+    assert v[full_id("Z2LGDM")] == "Sold" and v[full_id("7DTQP7")] == "Gone from the website"
+    assert v["bellhaven-of-batavia"] == "New" and v["bellhaven-of-tiffin"] == "Match, needs a fix"
 
 def test_money_never_written():
     assert not any(k in s.body for c in CARDS for s in c.steps for k in ("lifetime_revenue", "outstanding_ar"))
 ```
+
+Task 5 conftest additions: `REPORT` (snapshot scrape), `PROPOSAL = propose(REPORT, ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set())`, `CARDS = PROPOSAL.cards`, `card(kind, slug=None, account=None) -> Card` (exactly one match), `report_with(loc) -> ScrapeReport` (snapshot with that location replaced), `incomplete(report) -> ScrapeReport`, `sorted_slugs_of_unchanged_rows()`.
 
 - [ ] **Step 2: Run** `uv run pytest tests/test_propose.py -v`. Expected: FAIL.
 - [ ] **Step 3: Implement** `propose.py`. Evidence dict per card: `site` (Location fields), `crm` (each account's current fields + active contacts), `signals` (per candidate: each signal ✓/✗ with points), `ruled_out` (candidate, reason), `billing` (revenue, AR, `needs_chow`, the rule's sentence), `conflicts`.
@@ -390,12 +430,12 @@ def test_money_never_written():
 **Interfaces:**
 - Produces (`ledger.py`): `class Ledger(path: Path | str)` (SQLite, `journal_mode=WAL`, `busy_timeout=5000`; schema §10.1). Methods:
   - `start_run() -> int`; `finish_run(run_id, report: ScrapeReport, accounts_read: int) -> None`; `latest_run() -> dict | None`; `latest_complete_locations() -> list[Location]`.
-  - `decided_keys() -> set[str]`; `record_cards(run_id, cards: list[Card], complete: bool) -> dict[str, int]` (§10.3 steps 2–5; returns counts `new`, `refreshed`, `superseded`, `blocked`, `unblocked`).
-  - `cards(status: str | None = None) -> list[CardRow]`; `card(card_id) -> CardRow`; `CardRow` = `Card` + `status`, `version` (sha256 of change keys + `refreshed_at`), `flag`, `prior_rejections`, `operation` (latest operation with its steps).
-  - `claim(card_id, version) -> int | None` (§11 step 1, one transaction: card `pending` → `applying`, a new operation, its reservations and, for an alternative, the group with `owner_op`; returns the operation id, or None when anything was already taken); `set_status(card_id, expected, new) -> bool`; `decide(card_id, decision: str, note: str = "") -> None` (one row per change key); `settle_alt_group(op_id) -> None` (owner done: siblings superseded, their keys rejected "another choice was approved"); `discard(op_id) -> bool` (only from failed or needs-reconciliation with no landed write; releases reservations; reopens the owner's group; card `discarded`); `recover_interrupted() -> int` (every operation left `applying` → failed "Interrupted; Retry resumes").
+  - `decided_keys() -> frozenset[str]`; `record_cards(run_id, cards: list[Card], complete: bool) -> dict[str, int]` (§10.3 steps 3–5: a pending card with the same `change_set` keeps its instance id; otherwise a new instance id `secrets.token_hex(6)`; returns counts `new`, `refreshed`, `superseded`, `blocked`, `unblocked`); `record_verdicts(run_id, verdicts)`; `verdicts(run_id: int | None = None) -> list[Verdict]` (latest complete run by default).
+  - `cards(status: str | None = None) -> list[CardRow]`; `card(card_id) -> CardRow`; `CardRow` = `Card` + `id` (instance), `status`, `version` (sha256 of `change_set` + `refreshed_at`), `flag`, `prior_rejections` (earlier rejected values on the same record and field, with dates), `operation` (latest operation with its steps).
+  - `claim(card_id, version) -> int | None` (§11 step 1, one transaction: card `pending` → `applying`, a new operation, its reservations and, for an alternative, the group with `owner_op`; returns the operation id, or None when anything was already taken); `set_status(card_id, expected, new) -> bool`; `decide(card_id, decision: str, note: str = "") -> None` (one row per change key; rejecting the last open card of an alternative group closes it as "none of these" and inserts one attention card for the location); `settle_alt_group(op_id) -> None` (owner done: siblings superseded, their keys rejected "another choice was approved"); `discard(op_id, now: datetime) -> bool` (from failed with no landed write; from needs-reconciliation only when `now - intent_at >= 10 minutes` and the latest Check again, made after that point, found nothing (`steps.checked_empty_at`); releases reservations; reopens the owner's group; card `discarded`); `recover_interrupted() -> dict[str, int]` (§10.4: each operation left `applying` → needs-reconciliation if a POST has an intent and no outcome, else failed "Interrupted; Retry resumes").
   - `step_intent(op_id, n, method, path, body, before)`; `step_done(op_id, n, status, response, created_id)`; `step_failed(op_id, n, status, message)`; `finish_operation(op_id, status)`.
   - `reserved_accounts() -> set[str]`; `reserved_locations() -> set[str]`; `flag(card_id, reason)`; `history() -> list[dict]`.
-- Produces (`pipeline.py`): `RunSummary(run_id: int, complete: bool, reason: str, found: int, stated: int | None, accounts_read: int, counts: dict[str, int], by_section: dict[str, int])`; `run_once(fetch, crm, ledger: Ledger, operator_parent_name: str, today: date) -> RunSummary` (scrape → read CRM → find operator exactly once or raise `RunAborted` → reserved sets from the ledger → `propose` → drop decided keys → `record_cards`). A CRM read failure raises `RunAborted` before any ledger write.
+- Produces (`pipeline.py`): `RunSummary(run_id: int, complete: bool, reason: str, found: int, stated: int | None, accounts_read: int, counts: dict[str, int], by_section: dict[str, int], verdicts: list[Verdict])`; `find_operator(accounts, name) -> str`; `run_once(fetch, crm, ledger: Ledger, operator_parent_name: str, today: date) -> RunSummary` (scrape → read CRM → `find_operator` or raise `RunAborted` → reserved sets and `decided_keys()` from the ledger → `propose(..., decided)` → `record_cards` → `record_verdicts`). A CRM read failure raises `RunAborted` before any ledger write.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -424,6 +464,28 @@ def test_regrouped_rejection_stays_rejected(tmp_path):
     crm.patch_account_raw(full_id("NRLNME"), {"billing_street": "1610 College Avenue"})
     run_once(FETCH, crm, l, PARENT, DAY)
     assert not [c for c in l.cards("pending") if full_id("NRLNME") in c.account_ids]
+
+def test_monroe_retirement_returns_whole(tmp_path):    # §10.2, round 3 P5
+    l, crm = fresh(tmp_path); run_once(FETCH, crm, l, PARENT, DAY)
+    m = only(l.cards("pending"), kind="duplicates", slug="bellhaven-gardens-of-monroe"); l.decide(m.id, "rejected"); l.set_status(m.id, "pending", "rejected")
+    crm.patch_account_raw(full_id("KM4FHM"), {"lifetime_revenue": 1})        # KM4FHM now survives (billing first)
+    run_once(FETCH, crm, l, PARENT, DAY)
+    m2 = only(l.cards("pending"), kind="duplicates", slug="bellhaven-gardens-of-monroe")
+    assert {suffix(s.path.rsplit("/", 1)[1]): s.body for s in m2.steps if s.path.startswith("/accounts/")} == {
+        "LA9HTX": {"duplicate_of_account": full_id("KM4FHM"), "status": "Inactive"},
+        "AGG1S5": {"duplicate_of_account": full_id("KM4FHM"), "status": "Inactive"}}
+    [move] = [s for s in m2.steps if s.path.startswith("/contacts/")]       # Elaine Vogel leaves AGG1S5
+    assert move.path.endswith(contact_id("Elaine Vogel")) and move.body == {"account_id": full_id("KM4FHM")}
+
+def test_prior_rejection_is_linked(tmp_path):            # §10.3 step 4
+    l, crm = fresh(tmp_path); run_once(FETCH, crm, l, PARENT, DAY)
+    d = only(l.cards("pending"), kind="details", account="NRLNME"); l.decide(d.id, "rejected"); l.set_status(d.id, "pending", "rejected")
+    run_once(fake_fetcher(SITE, replace={"/communities/bellhaven-of-goshen": goshen_with_phone("(330) 405-9999")}), crm, l, PARENT, DAY)
+    assert only(l.cards("pending"), kind="details", account="NRLNME").prior_rejections[0]["value"] == "(330) 405-6040"
+
+def test_run_records_verdicts(tmp_path):
+    l, crm = fresh(tmp_path); s = run_once(FETCH, crm, l, PARENT, DAY)
+    assert len(s.verdicts) == 38 and len(l.verdicts()) == 38
 
 def test_crm_read_failure_leaves_ledger_untouched(tmp_path):
     l = Ledger(tmp_path/"d.db"); crm = FakeCrm.from_snapshot(SNAP); crm.fail_next("GET", 500, "down")
@@ -460,12 +522,12 @@ def test_already_inactive_operator_account_gets_no_card(tmp_path):
 
 **Files:**
 - Create: `src/bellhaven_sync/apply.py`, `src/bellhaven_sync/verify_lib.py`, `tests/fixtures/expected_end_state.json`
-- Test: `tests/test_apply.py`, `tests/test_end_state.py`, `tests/test_alternatives.py`
+- Test: `tests/test_apply.py`, `tests/test_restart.py`, `tests/test_end_state.py`, `tests/test_alternatives.py`
 
 **Interfaces:**
 - Consumes: `Ledger`, `propose`, `CrmClient`/`FakeCrm`, `run_once`'s operator lookup (expose `find_operator(accounts, name) -> str` in `pipeline.py`).
-- Produces (`apply.py`): `ApplyResult(status: str, done: int, total: int, message: str)` with status `done`, `failed`, `needs-reconciliation` or `refused`; `approve(card_id: str, version: str, ledger: Ledger, crm) -> ApplyResult`; `reject(card_id, version, ledger, note: str = "") -> ApplyResult`; `retry(card_id, ledger, crm) -> ApplyResult`; `check_again(card_id, ledger, crm) -> ApplyResult`; `discard(card_id, ledger) -> ApplyResult`; `acknowledge(card_id, version, ledger) -> ApplyResult`.
-- Behaviour exactly §11: `ledger.claim` → for each unfinished step, read the record (or search, for a POST) and compare with `step.expect`: equal → write; already at target → done without a write; anything else → `failed` with `"Changed since review at step n of m: <field> is now <x>, not <y> as reviewed"` and nothing more written. Finished steps are never re-judged; `$created` ids come from the step log. Note lines append once (skipped if already present). A POST records its intent first; an unknown outcome → `needs-reconciliation`, never re-POSTed; `check_again` searches `created_by_candidate=true` records with the full identity, `updated_at` after the intent and not adopted by another operation (one → adopt and continue; none → `"Not found yet"`; several → stop). A write error → `failed` with `"Failed at step n of m: <message>"`. At `done`, `ledger.settle_alt_group`.
+- Produces (`apply.py`): `ApplyResult(status: str, done: int, total: int, message: str)` with status `done`, `failed`, `needs-reconciliation` or `refused`; `approve(card_id: str, version: str, ledger: Ledger, crm) -> ApplyResult`; `reject(card_id, version, ledger, note: str = "") -> ApplyResult`; `retry(card_id, ledger, crm) -> ApplyResult`; `check_again(card_id, ledger, crm, now: Callable[[], datetime] = utcnow) -> ApplyResult`; `discard(card_id, ledger, now: Callable[[], datetime] = utcnow) -> ApplyResult`; `acknowledge(card_id, version, ledger) -> ApplyResult`. Allowed starting states exactly §10.4 (otherwise `refused`).
+- Behaviour exactly §11: `ledger.claim` → **before the first write**, check every step's `expect["fields"]` against the current record for every record that already exists (§11 step 3) → for each unfinished step, read the record (or search, for a POST) and compare with `step.expect`: equal → write; already at target → done without a write; anything else → `failed` with `"Changed since review at step n of m: <field> is now <x>, not <y> as reviewed"` and nothing more written. Finished steps are never re-judged; `$created` ids come from the step log. Note lines append once (skipped if already present). A POST records its intent first; an unknown outcome → `needs-reconciliation`, never re-POSTed; `check_again` searches `created_by_candidate=true` records with the step's full identity not adopted by another operation, ignoring timestamps (one → adopt and continue; none → `"Not found yet"` and record `checked_empty_at`; several → stop). A write error → `failed` with `"Failed at step n of m: <message>"`. At `done`, `ledger.settle_alt_group`.
 - `expected_end_state.json` schema: `{"accounts": {"<full id>": {<field>: <value or {"created_for": slug}>, "note_contains": [str]}}, "created_accounts": [{"slug", "name", "parent": "operator", "billing_street", "billing_city", "billing_state", "billing_zip", "care_type", "status", "phone", "administrator"}], "moved_contacts": [{"contact_id", "account_id"}]}`. Every row of DESIGN §9.1–9.2, with full ids. Any field not listed must equal the snapshot.
 
 - [ ] **Step 1: Write the failing tests**
@@ -518,6 +580,22 @@ def test_half_done_chow_reserves_both_accounts(tmp_path):
     run_once(FETCH, crm, l, PARENT, DAY)
     assert not [x for x in l.cards("pending") if x.location_slug == "bellhaven-of-tiffin" or full_id("WSXZZB") in x.account_ids]
 
+def test_cleared_ar_stops_chow_before_any_create(tmp_path):   # round 3, R3-3
+    c = chow_card("bellhaven-of-tiffin"); crm.patch_account_raw(full_id("WSXZZB"), {"outstanding_ar": 0})
+    r = approve(c.id, c.version, l, crm); assert r.status == "failed" and "outstanding_ar" in r.message and crm.writes == []
+
+def test_same_second_create_is_adopted(tmp_path):            # round 3, R3-2
+    c = new_card("bellhaven-of-batavia"); crm.lose_next_response("POST"); crm.freeze_clock("2026-11-07 23:00:00Z")
+    approve(c.id, c.version, l, crm); assert check_again(c.id, l, crm).status == "done"
+
+def test_uncertain_discard_waits_ten_minutes(tmp_path):      # §11 step 5
+    c = new_card("bellhaven-of-batavia"); crm.drop_next_write("POST"); t0 = utcnow()
+    assert approve(c.id, c.version, l, crm).status == "needs-reconciliation"
+    assert check_again(c.id, l, crm, now=lambda: t0 + timedelta(minutes=5)).message == "Not found yet"
+    assert discard(c.id, l, now=lambda: t0 + timedelta(minutes=5)).status == "refused"
+    check_again(c.id, l, crm, now=lambda: t0 + timedelta(minutes=11))
+    assert discard(c.id, l, now=lambda: t0 + timedelta(minutes=11)).status == "done"
+
 def test_rejected_write_shape_stops_cleanly(tmp_path):    # Review Focus 1
     crm.reject_fields({"care_type"}); c = new_card("bellhaven-of-batavia")
     r = approve(c.id, c.version, l, crm)
@@ -527,6 +605,15 @@ def test_two_alternatives_one_wins(tmp_path):              # test_alternatives.p
     new, pm = union_square_cards(); l2 = Ledger(l.path)
     ops = [l.claim(new.id, new.version), l2.claim(pm.id, pm.version)]
     assert sum(op is not None for op in ops) == 1
+
+def test_owner_retries_and_finishes(tmp_path):           # round 3, P5
+    new, pm = union_square_cards(); crm.fail_next("POST", 500, "boom")
+    assert approve(new.id, new.version, l, crm).status == "failed"
+    assert retry(new.id, l, crm).status == "done" and l.card(pm.id).status == "superseded"
+
+def test_rejecting_every_choice_raises_attention(tmp_path):   # §10.6, consistency E3
+    new, pm = union_square_cards(); reject(pm.id, pm.version, l); reject(new.id, new.version, l)
+    assert [c.kind for c in l.cards("pending") if c.location_slug == "bellhaven-at-union-square"] == ["attention"]
 
 def test_owner_retries_and_discard_reopens(tmp_path):     # round 2, N4
     new, pm = union_square_cards(); crm.fail_next("POST", 422, "bad field")
@@ -539,9 +626,26 @@ def test_owner_retries_and_discard_reopens(tmp_path):     # round 2, N4
 
 Shared fixtures in `tests/conftest.py` (added in this task): `fresh(tmp_path) -> (Ledger, FakeCrm)`; `end_state(tmp_path) -> (Ledger, FakeCrm)` = the flow of `test_end_state` up to the approvals; `chow_card`, `new_card`, `wrong_parent_card`, `details_card`, `union_square_cards` return the pending `CardRow`s after one `run_once`; `run_after(l, crm)` runs `run_once` and returns the pending cards.
 
-- [ ] **Step 2: Run** `uv run pytest tests/test_apply.py tests/test_end_state.py tests/test_alternatives.py -v`. Expected: FAIL.
+```python
+def test_crash_after_post_reconciles(tmp_path):          # test_restart.py; round 3, R3-1
+    c = new_card("bellhaven-of-batavia"); crm.crash_after_write("POST")
+    with pytest.raises(SimulatedCrash): approve(c.id, c.version, l, crm)
+    assert Ledger(l.path).recover_interrupted() == {"needs-reconciliation": 1, "failed": 0}
+    assert check_again(c.id, l, crm).status == "done"
+    assert sum(1 for (m, p, _) in crm.writes if m == "POST" and p == "/accounts") == 1
+
+def test_crash_between_patches_retries(tmp_path):
+    c = chow_card_existing("Z2LGDM"); crm.crash_after_write("PATCH")
+    with pytest.raises(SimulatedCrash): approve(c.id, c.version, l, crm)
+    assert Ledger(l.path).recover_interrupted() == {"needs-reconciliation": 0, "failed": 1}
+    assert retry(c.id, l, crm).status == "done"
+```
+
+FakeCrm gains `freeze_clock(ts)` (every `updated_at` it writes is `ts`) in this task; conftest gains `chow_card_existing(suffix)`, `goshen_with_phone(phone)` (Task 6) and `utcnow`.
+
+- [ ] **Step 2: Run** `uv run pytest tests/test_apply.py tests/test_restart.py tests/test_end_state.py tests/test_alternatives.py -v`. Expected: FAIL.
 - [ ] **Step 3: Implement** `apply.py`, write `expected_end_state.json` from DESIGN §9, and `diff_against_expected(crm, snapshot_dir: Path, expected_path: Path) -> list[str]` in `src/bellhaven_sync/verify_lib.py` (one line per mismatch: `<id or slug> <field>: expected X, got Y`; ignores `updated_at` and `parent_name`).
-- [ ] **Step 4: Run** the three files. Expected: PASS.
+- [ ] **Step 4: Run** the four files. Expected: PASS.
 - [ ] **Step 5: Commit** `feat: apply approved cards with per-step checks, safe creates and retry`.
 
 ---
@@ -554,10 +658,12 @@ Shared fixtures in `tests/conftest.py` (added in this task): `fresh(tmp_path) ->
 
 **Interfaces:**
 - Consumes: `Ledger`, `apply.*`, `Config`.
-- Produces: `create_app(cfg: Config, ledger: Ledger, crm_factory: Callable[[], Any], today: Callable[[], date]) -> FastAPI`. Routes: `GET /` (queue, optional `?location=<slug>`), `GET /history`, `POST /cards/{id}/approve|reject|retry|check-again|discard|acknowledge` (form fields `csrf`, `version`, optional `note`), each redirecting `303` to `/?section=<section>#card-<id>` with a flash message in a short-lived cookie.
-- Anti-forgery: on first GET, set cookie `bh_csrf` = `secrets.token_urlsafe(32)` (`HttpOnly`, `SameSite=Strict`, **no `Secure`**); every POST must carry the same value in `csrf` (`hmac.compare_digest`), else 403. A changed `version` → 409 "This card changed since you opened it. Reload." A card no longer `pending` → 409 "Already decided".
+- Produces: `create_app(cfg: Config, ledger: Ledger, crm_factory: Callable[[], Any], today: Callable[[], date]) -> FastAPI`. Routes: `GET /` (queue, optional `?location=<slug>`), `GET /locations` (§13 verdict table: subject, name, verdict, band, linked accounts with "View in CRM", the cards that fix it), `GET /history`, `POST /cards/{id}/approve|reject|retry|check-again|discard|acknowledge` (form fields `csrf`, `version`, optional `note`), each redirecting `303` to `/?section=<section>#card-<id>` with a flash message in a short-lived cookie.
+- Anti-forgery: on first GET, set cookie `bh_csrf` = `secrets.token_urlsafe(32)` (`HttpOnly`, `SameSite=Strict`, **no `Secure`**); every POST must carry the same value in `csrf` (`hmac.compare_digest`), else 403. A changed `version` → 409 "This card changed since you opened it. Reload." Each action's allowed starting states are §10.4's (Approve, Reject, Acknowledge: pending; Retry: failed; Check again: needs-reconciliation; Discard: failed or needs-reconciliation); any other → 409 "Already decided" (from a terminal state) or "Not available now".
 - Page content exactly §13: run banner (time, complete/why not, found/stated, accounts read, counts by section), red banner when the latest run is incomplete, sections in order with counts, each card a `<details id="card-<id>">`: collapsed line (section tag, facility, band, `summary`); expanded: before → after per field, site vs CRM side by side with administrator vs contacts, signals with ✓/✗ and points, ruled-out and conflicts, billing reasoning, "what will be written" (each step's method, path, body), alt-group siblings, prior rejections, "View in CRM" links (`cfg.crm_browser_url.format(account_id=...)`), Approve/Reject with an optional note. Blocked cards show why and render no Approve button; a failed card shows its message with Retry, and Discard while nothing has landed; a card needing reconciliation shows Check again. Flagged cards show a yellow banner and sort first.
 - One process (§10.4): `create_app` takes an exclusive `fcntl.flock` on `<db_path>.lock` and raises `AppLockedError` if another process holds it; then calls `ledger.recover_interrupted()` (message `Interrupted; Retry resumes`). `cli serve` turns `AppLockedError` into exit code 2 and the message "Another review app is already running on this database".
+
+- Test: also `tests/test_actions.py`, `tests/test_locations.py`.
 
 - [ ] **Step 1: Write the failing tests** (FastAPI `TestClient` over the fake CRM after one `run_once`)
 
@@ -581,6 +687,26 @@ def test_approve_then_already_decided(client):     # Review Focus 3
 def test_interrupted_apply_offers_retry(tmp_path):
     l = ledger_with_card_in("applying", tmp_path); client = TestClient(create_app(CFG, l, lambda: FAKE, lambda: DAY))
     assert "Interrupted; Retry resumes" in client.get("/").text and ">Retry<" in client.get("/").text
+    c = l.cards("failed")[0]
+    assert client.post(f"/cards/{c.id}/retry", data={"csrf": client.cookies["bh_csrf"], "version": c.version}, follow_redirects=True).status_code == 200
+    assert l.card(c.id).status == "done"                                      # consistency E5
+
+def test_actions_from_allowed_states_only(client):     # test_actions.py; round 3, P1
+    failed, recon = card_in_status("failed"), card_in_status("needs-reconciliation")
+    tok = client.cookies["bh_csrf"]
+    assert client.post(f"/cards/{failed.id}/discard", data={"csrf": tok, "version": failed.version}).status_code == 303
+    assert client.post(f"/cards/{recon.id}/check-again", data={"csrf": tok, "version": recon.version}).status_code == 303
+    p = any_pending()
+    assert client.post(f"/cards/{p.id}/retry", data={"csrf": tok, "version": p.version}).status_code == 409
+
+def test_locations_page(client):                      # test_locations.py; brief item 2
+    html = client.get("/locations").text
+    assert html.count('class="verdict') == 38 and "Confident match" in html and "Medium match, nothing to change" in html
+
+def test_history_shows_before_values(client):          # §13, consistency E4
+    c = pending(kind="details", account="NRLNME")
+    client.post(f"/cards/{c.id}/approve", data={"csrf": client.cookies["bh_csrf"], "version": c.version})
+    assert "(517) 409-8156" in client.get("/history").text
 
 def test_second_app_refuses(tmp_path):
     create_app(CFG_AT(tmp_path), Ledger(tmp_path/"d.db"), lambda: FAKE, lambda: DAY)
@@ -600,10 +726,12 @@ def test_changed_version_refused(client):
     c = any_pending(); assert client.post(f"/cards/{c.id}/approve", data={"csrf": client.cookies["bh_csrf"], "version": "stale"}).status_code == 409
 ```
 
-- [ ] **Step 2: Run** `uv run pytest tests/test_app.py tests/test_app_security.py -v`. Expected: FAIL.
+Task 8 conftest additions: `CFG`, `CFG_AT(tmp_path) -> Config`, `FAKE` (the FakeCrm behind `client`), `client` fixture, `pending(kind, slug=None, account=None)`, `any_pending()`, `card_in_status(status) -> CardRow` (drives a card there through the fake: `failed` via `fail_next`, `needs-reconciliation` via `drop_next_write`), `ledger_with_card_in(status, tmp_path) -> Ledger`.
+
+- [ ] **Step 2: Run** `uv run pytest tests/test_app.py tests/test_app_security.py tests/test_actions.py tests/test_locations.py -v`. Expected: FAIL.
 - [ ] **Step 3: Implement** `app.py`, templates and CSS. Plain HTML forms, no JavaScript. System font stack; one accent colour; legible at 1280×800 screen-recording size.
-- [ ] **Step 4: Run** the two files. Expected: PASS.
-- [ ] **Step 5: Design pass.** Run the installed `impeccable` and `taste-skill` reviews on a screenshot of `/` and one expanded card; fix what they find. Re-run Step 4.
+- [ ] **Step 4: Run** the four files. Expected: PASS.
+- [ ] **Step 5: Design pass.** Run the installed `impeccable` and `taste-skill` reviews on screenshots of `/`, one expanded card and `/locations`; fix what they find. Re-run Step 4.
 - [ ] **Step 6: Commit** `feat: review app`.
 
 ---
@@ -615,7 +743,7 @@ def test_changed_version_refused(client):
 - Test: `tests/test_cli.py`
 
 **Interfaces:**
-- Produces: `main(argv: list[str] | None = None) -> int`. Subcommands: `run` (prints the run banner; exit 0, or 1 on `RunAborted`), `serve [--host 127.0.0.1] [--port 8000]` (refuses a `--host` that is not loopback or a private/tailnet address: 10/8, 172.16/12, 192.168/16, 100.64/10), `flag <card-id> <reason>` and `flag --from-json <path>` (`[{"card_id", "reason"}]`).
+- Produces: `main(argv: list[str] | None = None) -> int`. Subcommands: `run` (prints the run banner and the verdict table of §13; exit 0, or 1 on `RunAborted`), `serve [--host 127.0.0.1] [--port 8000]` (refuses a `--host` that is not loopback or a private/tailnet address: 10/8, 172.16/12, 192.168/16, 100.64/10), `flag <card-id> <reason>` and `flag --from-json <path>` (`[{"card_id", "reason"}]`).
 - `deploy/crontab` exactly as §14. `deploy/github-actions-daily.yml`: `on: schedule: - cron: "30 11 * * *"` plus `workflow_dispatch`; checkout, `astral-sh/setup-uv`, `uv sync`, restore/save `decisions.db` on a `state` branch, `uv run bellhaven-sync run` with `BELLHAVEN_CRM_TOKEN: ${{ secrets.BELLHAVEN_CRM_TOKEN }}`. It lives outside `.github/workflows/`, so it never runs.
 - README: what it is (3 lines), quick start (`uv sync`; `export BELLHAVEN_CRM_TOKEN=…`; `uv run bellhaven-sync run`; `uv run bellhaven-sync serve`), how it works (the §4 diagram), schedule, tests (`uv run pytest`; `uv run pytest -m e2e`), links to DESIGN and WRITEUP.
 
@@ -623,7 +751,8 @@ def test_changed_version_refused(client):
 
 ```python
 def test_run_prints_banner(monkeypatch, tmp_path, capsys):   # wires fake fetcher + FakeCrm via monkeypatch of cli._dependencies
-    assert main(["run"]) == 0 and "42 proposals" in capsys.readouterr().out
+    out = capsys.readouterr().out if main(["run"]) == 0 else ""
+    assert "42 proposals" in out and "Confident match" in out and "bellhaven-meadows-of-findlay" in out
 
 def test_serve_refuses_public_host():
     assert main(["serve", "--host", "0.0.0.0"]) == 2
