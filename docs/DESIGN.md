@@ -1,7 +1,7 @@
 # Bellhaven CRM sync: design
 
-Status: v3, 2026-11-07, revised after two independent review rounds by GPT-6-Astra (dispositions in
-Appendix B). Author: Gage Martin, built with Claude Code. Every decision traces to Appendix A (ids like `D4`).
+Status: v4, 2026-11-07, revised after three independent review rounds by GPT-6-Astra and a spec/plan
+consistency check (dispositions in Appendix B). Author: Gage Martin, built with Claude Code. Every decision traces to Appendix A (ids like `D4`).
 
 ## 1. Purpose
 
@@ -74,15 +74,16 @@ Two programs share one SQLite file (`decisions.db`).
 
 ```
 website ─▶ scrape ─┐
-                   ├─▶ match ─▶ propose ─▶ decisions.db ─▶ review app ─▶ [Approve] ─▶ re-check ─▶ apply ─▶ CRM API
-CRM API ─(read)────┘                         ▲                                                              │
-                                             └───────────────── step log, before-values ◀───────────────────┘
+                   ├─▶ match ─▶ propose ─▶ decisions.db ─▶ review app ─▶ [Approve] ─▶ apply (check, then write) ─▶ CRM API
+CRM API ─(read)────┘                         ▲                                                                       │
+                                             └──────────────────── step log, before-values ◀────────────────────────┘
 ```
 
 - **Pipeline** `uv run bellhaven-sync run`: scrape, read the CRM, match, build cards, record them. Its CRM
   client is read-only; every write method raises `ReadOnlyError`.
-- **Review app** `uv run bellhaven-sync serve`: lists cards and records decisions. Approve and Retry are
-  the only paths that open a writable client, and each re-checks the card against fresh CRM data first.
+- **Review app** `uv run bellhaven-sync serve`: lists cards and locations and records decisions. Approve,
+  Retry and Check again are the only paths that open a writable client, and every write is preceded by a
+  check that the record still holds what the reviewer saw (11).
 
 | File | One job |
 |---|---|
@@ -90,11 +91,11 @@ CRM API ─(read)────┘                         ▲                    
 | `scrape.py` | Crawls the website, validates each page, returns `Location` records and a scrape report |
 | `crm.py` | The CRM API client; `read_only=True` by default |
 | `normalize.py` | Street, name, phone, ZIP and care-label cleanup |
-| `rules.py` | Every judgment call: eligibility, weights, bands, billing rule, survivor order, PO Box rule, care map, note wording, gone-from-website policy |
-| `match.py` | Candidate gate, signals, score, band, duplicate groups |
+| `rules.py` | Every judgment call: eligibility, candidate gate, weights, bands, billing rule, survivor order, PO Box rule, synced detail fields, care map, note wording, the gone-or-sold policy (8.6), section per card kind |
+| `match.py` | Computes signals and scores, applies the gate and bands from `rules.py`, forms duplicate groups, classifies each location |
 | `propose.py` | Turns matches and leftovers into changes and cards with evidence and ordered write steps |
 | `ledger.py` | SQLite schema, change keys, decisions, operations, reservations, alternative groups |
-| `apply.py` | Re-check, then execute an approved card's steps idempotently; retry; reconcile uncertain creates |
+| `apply.py` | Execute an approved card's steps, each after its check; Retry; Check again for uncertain creates |
 | `app.py`, `templates/`, `static/` | The review screens |
 | `cli.py` | `run`, `serve`, `flag` |
 | `scripts/verify.py` | Reads the CRM back; checks section 9 and the unchanged-everything-else invariants |
@@ -254,7 +255,7 @@ site's exact name (C4); **status** ≠ Active.
   administrator as a contact (title Administrator, the site's phone, no invented email).
 - When Low candidates exist (C3), each becomes a **Possible match** card ("this is the same facility": its
   ownership/name and details changes). The New account card and its Possible-match cards form one
-  **alternative group** (10.6); approving one closes the group.
+  **alternative group** (10.6); once an approved choice finishes, the group closes.
 
 ### 8.6 Operator accounts not on the website (D4, D6, E3, F14)
 
@@ -281,8 +282,10 @@ city; state; ZIP; and the mapped care type, only when the CRM's care type is not
 
 ### 8.8 Needs attention card
 
-A location with a conflict (7.2, 7.5) or an invalid page gets one card describing it, with no writes. It
-can be acknowledged (recorded as decided) but never approved into a write.
+A location with a conflict (7.2, 7.5), an invalid page, or an alternative group rejected in full (10.6) gets
+one card describing it, with no writes. Its single change is `attention` (record = the location slug or
+account id, value = a hash of what it describes), so each subject has its own key. It can be acknowledged
+(recorded as decided on that key, so the same situation is not raised again) but never approved into a write.
 
 ### 8.9 Notes (D10)
 
@@ -357,10 +360,14 @@ accounts (121 + 6 created), 73 contacts (67 + 6 created; one moved).
 
 ### 10.1 Tables
 
-- `runs(id, started_at, finished_at, complete, reason, pages_failed, found, stated, accounts_read, locations_json)`
+- `runs(id, started_at, finished_at, complete, reason, pages_failed, found, stated, accounts_read,
+  locations_json, verdicts_json)`: `verdicts_json` holds every location's and leftover account's verdict (13).
 - `changes(change_key PRIMARY KEY, kind, record, field, value, location_slug, first_run, last_run)`
 - `decisions(change_key, decision, card_id, at, reviewer_note)`: decision is approved or rejected.
-- `cards(id, kind, section, title, band, change_keys, evidence, steps, status, alt_group, flag, built_run)`
+- `cards(id, change_set, kind, section, title, band, change_keys, evidence, steps, status, alt_group, flag,
+  built_run)`: `id` is a fresh instance id; `change_set` is the hash of the sorted change keys. A pending card
+  whose `change_set` is unchanged keeps its instance; a new review (after a discard, say) gets a new instance,
+  and the old one stays in history.
 - `operations(id, card_id, status, started_at, finished_at)`, `steps(op_id, n, method, path, body, expect,
   before, intent_at, response_status, response_body, created_id, status)`
 - `reservations(op_id, account_id | location_slug)`, `alt_groups(id, location_slug, status, owner_op)`
@@ -374,7 +381,8 @@ revive a decided change: if Goshen's phone-and-street card is rejected and the s
 someone else, the phone change keeps its rejected key and is not proposed again. Relations are single
 changes: `retire_duplicate` and `set_chow` each carry all of their effects, so no decision can leave half a
 retirement behind (a rejected Monroe retirement whose survivor later changes comes back whole, pointer and
-Inactive together).
+Inactive together). Cards and their write steps are built only from changes that survive the decision
+filter (10.3 step 2), so a rejected field can never ride along in another card's PATCH.
 
 ### 10.3 Each run
 
@@ -392,21 +400,28 @@ Inactive together).
 
 | Thing | Moves |
 |---|---|
-| Card | pending → applying → done · pending → rejected · pending → superseded · pending → blocked → pending · applying → failed → applying (Retry) · applying → needs-reconciliation → applying (Check again finds the record) · failed or needs-reconciliation → discarded (Discard, only while no write of the operation has landed) |
+| Card | pending → applying → done · pending → rejected · pending → acknowledged (attention cards) · pending → superseded · pending → blocked → pending · applying → failed → applying (Retry) · applying → needs-reconciliation → applying (Check again finds the record) · failed → discarded (Discard, when no write of the operation has landed) · needs-reconciliation → discarded (Discard, under 11 step 5's rule) |
 | Operation | applying → done · applying → failed · applying → needs-reconciliation · failed or needs-reconciliation → applying · failed or needs-reconciliation → discarded |
+| Alternative group | open → claimed (owner's approval) → closed (owner done) · claimed → open (owner discarded) · open → closed as "none of these" (every card rejected; an attention card follows) |
+
+Each action has its allowed starting states: Approve, Reject and Acknowledge from pending; Retry from failed;
+Check again from needs-reconciliation; Discard from failed or needs-reconciliation. Any other state is refused
+with "already decided" or "not available now".
 
 A card and its operation move together inside one SQLite transaction; every move is guarded by the expected
 current status. Only the review app applies, and it runs as **one process holding an exclusive lock** on
-`decisions.db.lock` (a second `serve` refuses to start). At startup it moves every operation left `applying`
-to failed with "Interrupted; Retry resumes", which is safe because no other process can be applying. A
-discarded card carries no decision, so the next run proposes its changes again from fresh data.
+`decisions.db.lock` (a second `serve` refuses to start). At startup it reads the step log of every operation
+left `applying`: a POST with a recorded intent and no recorded outcome makes the operation
+needs-reconciliation (the request may have reached the CRM); otherwise the operation becomes failed with
+"Interrupted; Retry resumes". A discarded card carries no decision, so the next run proposes its changes again
+as a new card instance.
 
 ### 10.5 Reservations (F5)
 
 An operation that is applying, failed or needs reconciliation reserves every account it touches and its
 location. The pipeline builds no change for a reserved account or location, so a half-finished change of
 ownership is never mistaken for a duplicate. The reservation ends when the operation is done or discarded,
-and never blocks the operation that holds it.
+and never blocks the operation that holds it. An operation needing reconciliation keeps its reservation.
 
 ### 10.6 Alternative groups (F9)
 
@@ -428,12 +443,16 @@ banner and sort first in their section. The blind model check (17.1) uses this.
 1. **Claim** in one transaction: card pending → applying, a new operation, its reservations and, for an
    alternative, the group. A double click, a second tab or the back button sees "already decided".
 2. **Every step carries what it expects** (`expect`), fixed when the card was built from the data reviewed:
-   - a PATCH: the current value of every field it writes, plus the facts its decision rests on: revenue and
-     AR for a parent move (so new AR sends Lima back for review), `parent_id`, `duplicate_of_account` and
+   - a PATCH: the current value of every field it writes (`note` included when it appends a line), plus the
+     facts its decision rests on: revenue and AR for a parent move or a CHOW pointer (so new AR sends Lima
+     back for review, and cleared AR sends Tiffin back), `parent_id`, `duplicate_of_account` and
      `chow_current_account` for a retirement or a CHOW pointer, and a contact's `account_id` for a move;
    - a create: that no Active account under the operator has the same full address; for a contact, that the
      target account has no active contact with the same name.
-3. **Before each unfinished step**, read the record (or search, for a create). Equal to `expect` → write.
+3. **Before the first write**, every step's expectations about records that already exist are checked
+   together, so a change of ownership whose old account no longer qualifies stops before anything is created.
+   **Before each unfinished step**, its own expectations are checked again: read the record (or search, for a
+   create). Equal to `expect` → write.
    Already equal to the target → the step counts as done without a write. Anything else → the operation stops
    and the card shows what changed ("Phone is now (330) 555-0123, not (517) 409-8156 as reviewed"); nothing
    more is written. Steps this operation already finished are never re-judged, and ids it created come from
@@ -441,12 +460,16 @@ banner and sort first in their section. The blind model check (17.1) uses this.
 4. **Writes.** A PATCH is confirmed by its response showing the targets; a note line is appended once (skipped
    when already present). Before a POST, its intent and full identity are stored; on success the new id is
    stored at once.
-5. **Unknown outcome** (timeout, crash during a POST) → needs-reconciliation; the system never sends that POST
-   again. **Check again** searches records with `created_by_candidate = true`, the full identity, `updated_at`
-   after the intent, and not adopted by another operation: exactly one → adopted and the operation continues;
-   none → "Not found yet" and the card waits; several → stop for a person. While nothing is found, the reviewer
-   may **Discard** the operation if none of its writes has landed; the next run proposes the location again,
-   and that create re-checks that no account exists at the address.
+5. **Unknown outcome** (timeout, a crash between sending a POST and recording its answer) → needs-reconciliation;
+   the system never sends that POST again, and the operation keeps its reservations. **Check again** searches
+   records with `created_by_candidate = true` and the step's full identity (for an account: name, street, city,
+   state, ZIP, parent; for a contact: name, title, account) that no other operation has adopted: exactly one →
+   adopted and the operation continues; none → "Not found yet" and the card waits; several → stop for a person.
+   Timestamps are shown as evidence only; the CRM reports whole seconds, so they never decide ownership.
+   **Discard** of an uncertain create is allowed only when at least 10 minutes have passed since its intent
+   (thirty times the 20-second request timeout) and a Check again made after that found nothing; the next run
+   proposes the location again, and that create re-checks that no account exists at the address. The CRM
+   offers no create-once key, so this is the strongest guarantee available; the residual case is in section 20.
 6. **A write error** → failed with "Failed at step n of m: <API message>". **Retry** resumes at the first
    unfinished step under the same checks.
 7. **No undo button (F2 revised).** History keeps every write's before-values; a mistake is corrected on
@@ -462,9 +485,10 @@ banner and sort first in their section. The blind model check (17.1) uses this.
   POSTs), each checked in the CRM browser; what they show goes into `docs/api-notes.md`.
 - `parent_name` is derived by the CRM from `parent_id`; the system never writes it and the first PATCH
   confirms it follows. Records the system creates come back with `created_by_candidate = true` (every
-  record in today's snapshot is false), which reconciliation (11 step 4) relies on.
+  record in today's snapshot is false), which Check again (11 step 5) relies on.
 - Status values: Active, Inactive, Needs Review. Page size ≤ 200. Bearer key on every request.
-- Only an idempotent PATCH is retried after a connection error, inside one Approve or Retry click.
+- Only an idempotent PATCH is retried after a connection error, inside one Approve, Retry or Check again
+  click; a POST never is.
 
 ## 13. Review app (`app.py`, F1, F3)
 
@@ -476,8 +500,14 @@ banner and sort first in their section. The blind model check (17.1) uses this.
   ✓/✗ and points; ruled-out candidates and conflicts with reasons; the billing-rule reasoning; "what will be
   written" (each API call); the alternative group and any earlier rejection; a "View in CRM" link per
   account; Approve and Reject with an optional reviewer note. Blocked cards show why and have no Approve
-  button. A stopped card shows the difference found, with Retry, and Discard while nothing has landed; a
-  card waiting on reconciliation shows Check again.
+  button. A failed card shows its message (the difference found, or the API's error) with Retry, and Discard
+  when nothing has landed; a card needing reconciliation shows Check again, and Discard once 11 step 5 allows.
+- **Locations (`/locations`):** every website location and every leftover operator account from the latest
+  run with its verdict: **Confident match** (High, nothing to change), **Medium match, nothing to change**
+  (with the signals that carried it), **Match, needs a fix** (with the cards that fix it), **Possible match only** (Low, with the reason), **New** (no CRM account), **Gone from the website**,
+  **Sold** (a buyer's account at the same address), **Needs attention**; with the linked CRM account and a
+  "View in CRM" link. `bellhaven-sync run` prints the same table. This is the matcher's classification of all
+  35, including the 10 that need no change.
 - **One card at a time** (F3). One app process at a time (10.4).
 - **After a click:** back to the same section with "Approved: 3 of 3 writes done" or "Failed at step 2 of 3:
   <API message> [Retry]".
@@ -505,9 +535,9 @@ banner and sort first in their section. The blind model check (17.1) uses this.
 | CRM read fails or the operator's parent is not found exactly once | Run aborts; ledger untouched; exit code 1 |
 | A value differs from what was reviewed | Stops before that write and shows the difference; Discard while nothing has landed, and the next run rebuilds the card |
 | A write returns 4xx/5xx | Card failed with the API message and "n of m done"; Retry |
-| A create's outcome is unknown | Needs reconciliation; Check again; the system never re-sends the POST |
+| A create's outcome is unknown | Needs reconciliation; Check again; the system never re-sends the POST; Discard only after 10 minutes and an empty check |
 | Two clicks, two tabs, or two alternatives at once | One transaction claims; the other sees "already decided" |
-| Process killed mid-apply | At the next start the operation is failed ("Interrupted"); Retry resumes under the same checks |
+| Process killed mid-apply | At the next start: a POST without a recorded answer → needs reconciliation; otherwise failed ("Interrupted") and Retry resumes under the same checks |
 
 ## 16. Tests (G1, F19)
 
@@ -533,11 +563,23 @@ pytest against an in-memory fake CRM loaded from `tests/fixtures/snapshot/`; the
   response becomes needs-reconciliation, Check again adopts the record and only one POST was sent; Discard is
   refused once a write has landed; a half-done Tiffin change reserves both accounts so the next run proposes no
   duplicate; an operation left applying is failed at app start and Retry completes it.
-- `test_alternatives`: two approvals in one group, one wins; the owner retries its failed choice; discarding
-  it reopens the group with the sibling still pending.
+- `test_apply` also: Tiffin's AR cleared before approval stops the change of ownership before any create; a
+  rejected phone plus a new street change on the same account yields a Details PATCH with the street only;
+  an uncertain create found in the same second as its intent is still adopted; Discard of an uncertain create
+  is refused before 10 minutes.
+- `test_restart`: a crash after a POST was sent and before its answer was recorded comes back as
+  needs-reconciliation, and Check again adopts the record with exactly one account created; a crash between
+  two PATCH steps comes back failed, and Retry finishes the card.
+- `test_alternatives`: two approvals in one group, one wins; the owner retries its failed choice and finishes;
+  discarding it reopens the group with the sibling still pending; rejecting every choice closes the group and
+  raises one attention card.
+- `test_locations`: the Locations page and the run's table list 35 locations and 3 leftover accounts; the 9
+  unchanged rows of 9.1 show as Confident match and Ashtabula as Medium match, nothing to change.
 - `test_readonly`: the pipeline's client raises on every write method.
 - `test_app_security`: a write without the anti-forgery token, by GET, or against a changed card version is refused.
 - `test_single_process`: a second `serve` on the same database refuses to start.
+- `test_actions`: Retry, Check again and Discard succeed through their HTTP endpoints from their allowed states
+  and are refused from any other.
 - `e2e/test_review_flow.py` (Playwright): approve one card, reject one, run again, the rejected card stays gone.
 
 ## 17. Checking the answers before anything is approved (H1, H2)
@@ -572,7 +614,8 @@ pytest against an in-memory fake CRM loaded from `tests/fixtures/snapshot/`; the
   Tiffin and the old account's pointer; 1:45 one sentence on re-runs. Everything else is approved after the
   recording. Gage uploads it unlisted to YouTube.
 - Time (A2, K4): Gage's focused time from 19:33:57Z, by session, nearest quarter hour, "X hours".
-- Walkthrough preparation (J2): a one-page code tour, a cheat sheet of about 8 likely live changes with the one
+- Walkthrough preparation (J2): a one-page code tour in two layers (the core path: scrape → match → propose →
+  approve; then the safety layer: ledger, checks before writes, recovery), a cheat sheet of about 8 likely live changes with the one
   place each lands, a 20-minute mock with a surprise change.
 
 ## 19. Timeline (UTC)
@@ -591,6 +634,10 @@ pytest against an in-memory fake CRM loaded from `tests/fixtures/snapshot/`; the
 - **Sandusky (D4):** a disclosed exception to "create a new account"; the writeup says why.
 - **Live change in the usual window (J1):** hook messages may show on the screen share; a one-line explanation
   is rehearsed.
+- **Uncertain creates (residual):** the CRM has no create-once key. If the CRM committed a POST more than 10
+  minutes after the app gave up on it, and a reviewer discarded it in between, the next approved create could
+  duplicate it. The 20-second request timeout and the absence check before every create make this
+  unrealistic; it is disclosed rather than claimed impossible.
 - **Write shapes unknown until the first approved writes:** done off camera first; a 422 shows its message
   on the card and nothing else changes.
 
@@ -687,4 +734,27 @@ Round-1 status: 17 resolved, 8 partial (F3, F4, F9, F10, F14, F20, F23 and the N
 | N8 false "no other account at this address" note | 8.6: none / exactly one current / anything else → Needs attention / reserved → wait |
 | F14 an inactive account could be the successor | 8.6: the successor must be Active, eligible and compatible; consolidation named as such |
 | F20 crowded video | 18: Tiffin approve, Union Square reject, CRM browser |
+
+## Appendix B3. Independent review round 3 (GPT-6-Astra) and consistency check, 2026-11-07
+
+Round 3 verdict on v3: not sound on uncertain creates and plan consistency; section 9 confirmed byte-for-byte
+unchanged and re-derived (42 / 41 + 1 / 127 / 73). Round-2 items: 10 resolved, 4 partial, N5 not resolved.
+
+| Finding | Where fixed in v4 (and the plan) |
+|---|---|
+| N5, R3-1 uncertain create could be repeated (incl. after restart) | 10.4 startup reads the step log; 10.5 reservation kept; 11 step 5 Discard only after 10 minutes and an empty check; residual risk in 20 |
+| R3-2 timestamp filter could hide our own create | 11 step 5: identity and adoption, timestamps evidence only |
+| R3-3 CHOW prerequisites checked too late | 11 steps 2–3: all prerequisites before the first write; revenue/AR in the CHOW pointer's expectations |
+| R3-4, consistency F2 section 4 wording | 4 |
+| P1 recovery actions refused by the app | 10.4 allowed starting states; PLAN Task 8 |
+| P2 card identity after discard; attention identity | 10.1 instance id + change set; 8.8 attention key |
+| P3 decided field could ride in a rebuilt PATCH | 10.2: cards built only from surviving changes; PLAN Tasks 5–6 |
+| P4 note missing from expectations | 11 step 2; PLAN Task 5 |
+| P5, consistency E2/E5 missing tests | 16 (Monroe re-run, owner Retry, restart) |
+| Consistency E1 no per-location classification | 13 Locations page and run table; 10.1 `verdicts_json`; 16 `test_locations` |
+| Consistency F1 judgment calls outside `rules.py` | 4 file table; PLAN Task 4 |
+| Consistency E3 "none of these" state | 10.4 group table; 8.8; 16 |
+| Consistency B1 Discard rule vague | 11 step 5 |
+| Consistency F3 proportion | 18: two-layer code tour |
+| Consistency F4 wording | 8.5, 12, 13 |
 
