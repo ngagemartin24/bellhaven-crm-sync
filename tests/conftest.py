@@ -158,3 +158,23 @@ def sorted_slugs_of_unchanged_rows() -> list[str]:
         "bellhaven-of-saline", "bellhaven-of-meadville", "bellhaven-woods-of-toledo", "bellhaven-of-kalamazoo",
         "bellhaven-court-of-altoona",
     ])
+
+
+# ---- ledger and run fixtures (Task 6) -----------------------------------------------------------
+def fresh(tmp_path):
+    from fake_crm import FakeCrm
+
+    from bellhaven_sync.ledger import Ledger
+
+    return Ledger(tmp_path / "d.db"), FakeCrm.from_snapshot(SNAP)
+
+
+def only(cards, kind: str, slug: str | None = None, account: str | None = None):
+    hits = [c for c in cards if c.kind == kind and (slug is None or c.location_slug == slug)
+            and (account is None or full_id(account) in c.account_ids)]
+    assert len(hits) == 1, f"{len(hits)} {kind} cards for {slug or account}"
+    return hits[0]
+
+
+def goshen_with_phone(phone: str) -> str:
+    return (SITE / "communities" / "bellhaven-of-goshen.html").read_text().replace("(330) 405-6040", phone)
