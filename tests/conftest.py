@@ -120,3 +120,41 @@ def sig(**true_fields):
 
     base = {"street": False, "admin": False, "phone": False, "zip": False, "city": False, "name": 0.0, "po_box": False}
     return Signals(**{**base, **true_fields})
+
+
+# ---- proposal fixtures (Task 5) -----------------------------------------------------------------
+def _proposal():
+    from bellhaven_sync.propose import propose
+
+    return propose(REPORT, ACCOUNTS, CONTACTS, OPERATOR_ID, DAY, set(), set())
+
+
+PROPOSAL = _proposal()
+CARDS = PROPOSAL.cards
+
+
+def card(kind: str, slug: str | None = None, account: str | None = None):
+    hits = [c for c in CARDS if c.kind == kind and (slug is None or c.location_slug == slug)
+            and (account is None or full_id(account) in c.account_ids)]
+    assert len(hits) == 1, f"{len(hits)} {kind} cards for {slug or account}"
+    return hits[0]
+
+
+def report_with(loc):
+    from dataclasses import replace as dc_replace
+
+    return dc_replace(REPORT, locations=[loc if x.slug == loc.slug else x for x in REPORT.locations])
+
+
+def incomplete(report):
+    from dataclasses import replace as dc_replace
+
+    return dc_replace(report, complete=False, reason="found 34, stated 35")
+
+
+def sorted_slugs_of_unchanged_rows() -> list[str]:
+    return sorted([
+        "bellhaven-of-maplewood", "bellhaven-of-new-carlisle", "bellhaven-of-wooster", "bellhaven-terrace-of-akron",
+        "bellhaven-of-saline", "bellhaven-of-meadville", "bellhaven-woods-of-toledo", "bellhaven-of-kalamazoo",
+        "bellhaven-court-of-altoona",
+    ])
