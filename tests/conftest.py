@@ -204,3 +204,85 @@ def only(cards, kind: str, slug: str | None = None, account: str | None = None):
 
 def goshen_with_phone(phone: str) -> str:
     return (SITE / "communities" / "bellhaven-of-goshen.html").read_text().replace("(330) 405-6040", phone)
+
+
+# ---- apply fixtures (Task 7) ----------------------------------------------------------------------
+EXPECTED = Path(__file__).parent / "fixtures" / "expected_end_state.json"
+
+
+def utcnow():
+    from datetime import UTC, datetime
+
+    return datetime.now(UTC)
+
+
+def ready(tmp_path):
+    """A ledger and fake CRM after one daily run: 42 pending cards."""
+    from bellhaven_sync.pipeline import run_once
+
+    l, crm = fresh(tmp_path)
+    run_once(FETCH, crm, l, PARENT, DAY)
+    return l, crm
+
+
+def run_after(l, crm):
+    from bellhaven_sync.pipeline import run_once
+
+    run_once(FETCH, crm, l, PARENT, DAY)
+    return l.cards("pending")
+
+
+def end_state(tmp_path):
+    """The intended review: reject the Union Square possible match, approve the other 41."""
+    from bellhaven_sync.apply import approve, reject
+
+    l, crm = ready(tmp_path)
+    pm = only(l.cards("pending"), kind="possible_match")
+    assert reject(pm.id, pm.version, l).status == "done"
+    for c in l.cards("pending"):
+        r = approve(c.id, c.version, l, crm)
+        assert r.status == "done", (c.title, r.message)
+    return l, crm
+
+
+def chow_card(l, slug):
+    return only(l.cards("pending"), kind="chow", slug=slug)
+
+
+def chow_card_existing(l, sfx):
+    return only(l.cards("pending"), kind="chow", account=sfx)
+
+
+def new_card(l, slug):
+    return only(l.cards("pending"), kind="new_account", slug=slug)
+
+
+def wrong_parent_card(l, sfx):
+    return only(l.cards("pending"), kind="wrong_parent", account=sfx)
+
+
+def details_card(l, sfx):
+    return only(l.cards("pending"), kind="details", account=sfx)
+
+
+def union_square_cards(l):
+    slug = "bellhaven-at-union-square"
+    return new_card(l, slug), only(l.cards("pending"), kind="possible_match", slug=slug)
+
+
+def batavia_record_under_operator():
+    rec = dict(acct("9MB6KL"))
+    rec.update(
+        account_id="001ELSEWHERE00000001",
+        name="Bellhaven of Batavia",
+        billing_street="2000 Hospital Dr",
+        billing_city="Batavia",
+        billing_state="OH",
+        billing_zip="45103",
+        parent_id=OPERATOR_ID,
+        status="Active",
+        note="",
+        lifetime_revenue=0,
+        outstanding_ar=0,
+    )
+    return rec

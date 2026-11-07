@@ -349,6 +349,26 @@ class Ledger:
             if decision == "rejected":
                 self._maybe_close_group(db, card_id)
 
+    def close_card(self, card_id: str, version: str, decision: str, note: str = "") -> bool:
+        """Reject or acknowledge: pending -> rejected/acknowledged, decisions recorded, a group closed when it was the
+        last open choice; all in one transaction, guarded by the reviewed version."""
+        status = {"rejected": "rejected", "acknowledged": "acknowledged"}[decision]
+        with self.tx() as db:
+            r = db.execute(
+                "SELECT change_set, refreshed_at, status FROM cards WHERE id=?", (card_id,)
+            ).fetchone()
+            if (
+                r is None
+                or r["status"] != "pending"
+                or digest([r["change_set"], r["refreshed_at"]]) != version
+            ):
+                return False
+            db.execute("UPDATE cards SET status=? WHERE id=? AND status='pending'", (status, card_id))
+            self._decide(db, card_id, decision, note)
+            if decision == "rejected":
+                self._maybe_close_group(db, card_id)
+            return True
+
     def _decide(self, db, card_id: str, decision: str, note: str) -> None:
         row = db.execute("SELECT changes FROM cards WHERE id=?", (card_id,)).fetchone()
         at = now_iso()
@@ -405,6 +425,12 @@ class Ledger:
 
     def claim(self, card_id: str, version: str) -> int | None:
         """11 step 1: card pending -> applying, a new operation, its reservations and its group, in one go."""
+        try:
+            return self._claim(card_id, version)
+        except _Abort:
+            return None
+
+    def _claim(self, card_id: str, version: str) -> int | None:
         with self.tx() as db:
             r = db.execute("SELECT * FROM cards WHERE id=?", (card_id,)).fetchone()
             if (
