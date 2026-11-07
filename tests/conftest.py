@@ -286,3 +286,70 @@ def batavia_record_under_operator():
         outstanding_ar=0,
     )
     return rec
+
+
+# ---- review app fixtures (Task 8) --------------------------------------------------------------
+def CFG_AT(tmp_path):
+    from bellhaven_sync.config import Config
+
+    return Config(
+        site_url=BASE,
+        crm_url="http://crm.invalid/api/v1",
+        crm_browser_url="http://crm.invalid/crm/{token}/accounts/{account_id}",
+        operator_parent_name=PARENT,
+        db_path=tmp_path / "d.db",
+        token="test-token",
+    )
+
+
+class AppEnv:
+    def __init__(self, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from bellhaven_sync.app import create_app
+
+        self.l, self.fake = ready(tmp_path)
+        self.cfg = CFG_AT(tmp_path)
+        self.client = TestClient(create_app(self.cfg, self.l, lambda: self.fake, lambda: DAY))
+        self.client.get("/")  # sets the anti-forgery cookie
+
+    @property
+    def token(self):
+        return self.client.cookies["bh_csrf"]
+
+    def pending(self, kind, slug=None, account=None):
+        return only(self.l.cards("pending"), kind=kind, slug=slug, account=account)
+
+    def any_pending(self):
+        return self.l.cards("pending")[0]
+
+    def post(self, card, action, **kw):
+        data = {"csrf": self.token, "version": card.version, **kw.pop("data", {})}
+        kw.setdefault("follow_redirects", False)
+        return self.client.post(f"/cards/{card.id}/{action}", data=data, **kw)
+
+    def card_in_status(self, status):
+        from bellhaven_sync.apply import approve
+
+        if status == "failed":
+            c = self.pending("details", account="NRLNME")
+            self.fake.fail_next("PATCH", 500, "boom")
+        else:
+            c = self.pending("new_account", slug="bellhaven-of-batavia")
+            self.fake.drop_next_write("POST")
+        approve(c.id, c.version, self.l, self.fake)
+        return self.l.card(c.id)
+
+
+@pytest.fixture
+def env(tmp_path):
+    return AppEnv(tmp_path)
+
+
+def ledger_with_card_in(status, tmp_path):
+    """A ledger left with one operation mid-apply, as if the app stopped."""
+    assert status == "applying"
+    l, _ = ready(tmp_path)
+    c = only(l.cards("pending"), kind="details", account="NRLNME")
+    assert l.claim(c.id, c.version) is not None
+    return l

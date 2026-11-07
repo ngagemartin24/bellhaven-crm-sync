@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}History{% endblock %}
+{% block h1 %}History{% endblock %}
+{% block sub %}Every decision, newest first, with each write's request, the CRM's answer and the values it replaced.{% endblock %}
+{% block content %}
+<section class="panel history">
+  {% for e in entries %}
+  <details class="entry">
+    <summary><span class="who">{{ e.card.title or e.card.id }}</span><span class="pill {{ 'ok' if e.decision == 'approved' else 'neutral' }}">{{ e.decision|capitalize }}</span><span class="muted">{{ e.card.section }} · {{ status_words.get(e.card.status, e.card.status) }}</span><span class="when num">{{ when(e.at) }}</span></summary>
+    {% if e.note %}<p class="muted">Note: {{ e.note }}</p>{% endif %}
+    {% if e.card.summary %}<p>{{ e.card.summary }}</p>{% endif %}
+    {% for o in e.operations %}
+      {% if o.message %}<p class="muted">{{ o.message }}</p>{% endif %}
+      <table class="table steps">
+        <thead><tr><th scope="col">Step</th><th scope="col">Request</th><th scope="col">Before</th><th scope="col">Sent</th><th scope="col">Result</th></tr></thead>
+        <tbody>
+        {% for s in o.steps %}
+          <tr><td class="num">{{ s.n }}</td><td><code>{{ s.method }} {{ s.path }}</code></td>
+            <td>{% if s.before and s.before != 'null' %}{% for k, val in (s.before|fromjson).items() %}<span class="kv">{{ field_words.get(k, k) }}: {{ val if val not in (none, '') else '—' }}</span>{% endfor %}{% else %}<span class="muted">—</span>{% endif %}</td>
+            <td>{% if s.body and s.body != '{}' %}{% for k, val in (s.body|fromjson).items() %}<span class="kv">{{ field_words.get(k, k) }}: {{ val }}</span>{% endfor %}{% else %}<span class="muted">nothing (already as approved)</span>{% endif %}</td>
+            <td>{{ s.status }}{% if s.response_status %} · {{ s.response_status }}{% endif %}{% if s.created_id %} · new id <span class="id">{{ s.created_id }}</span>{% endif %}{% if s.message %}<span class="line2">{{ s.message }}</span>{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    {% endfor %}
+  </details>
+  {% else %}
+  <p class="muted">No decisions yet.</p>
+  {% endfor %}
+</section>
+{% endblock %}

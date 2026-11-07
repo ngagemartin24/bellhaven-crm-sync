@@ -137,7 +137,8 @@ class _Builder:
             **{k: acc.get(k, "") for k in ACCOUNT_VIEW},
             "account_id": account_id,
             "contacts": [
-                {"name": c.get("name"), "title": c.get("title")} for c in self.by_account.get(account_id, [])
+                {"contact_id": c.get("contact_id"), "name": c.get("name"), "title": c.get("title")}
+                for c in self.by_account.get(account_id, [])
             ],
         }
 

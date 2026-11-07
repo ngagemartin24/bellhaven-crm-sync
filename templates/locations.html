@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Locations{% endblock %}
+{% block h1 %}Locations{% endblock %}
+{% block sub %}{% if run %}How the latest complete run classified every website location and every Bellhaven account not on the website: {{ total }} in all.{% else %}No run yet.{% endif %}{% endblock %}
+{% block content %}
+<nav class="counts" aria-label="Filter by verdict">
+  <a href="/locations" {% if not current %}aria-current="true"{% endif %}><span class="label">All</span><span class="value num">{{ total }}</span></a>
+  {% for name in order %}{% set n = counts.get(name, 0) %}
+  <a href="/locations?verdict={{ name|urlencode }}" {% if current == name %}aria-current="true"{% endif %}><span class="label">{{ name }}</span><span class="value num">{{ n }}</span></a>
+  {% endfor %}
+</nav>
+<section class="panel">
+  <table class="table">
+    <thead><tr><th scope="col">Website location or account</th><th scope="col">Verdict</th><th scope="col">Linked CRM account</th><th scope="col">Proposals</th></tr></thead>
+    <tbody>
+    {% for r in rows %}{% set v = r.v %}
+      <tr>
+        <td><span class="who">{{ v.name }}</span><span class="line2">{{ v.reason }}</span></td>
+        <td><span class="verdict v-{{ v.verdict|lower|replace(' ', '-')|replace(',', '') }}">{{ v.verdict }}</span>{% if v.band %}<span class="line2">{{ v.band }} confidence</span>{% endif %}</td>
+        <td>{% for a, link in r.links %}<span class="id">{{ a[-6:] }}</span>{% if link %} <a href="{{ link }}" rel="noreferrer">View in CRM</a>{% endif %}{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</td>
+        <td>{% for f in r.fixes %}<a href="/?card={{ f.id }}#card-{{ f.id }}">{{ f.section }}</a> <span class="muted">{{ status_words[f.status] }}</span>{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">No locations with this verdict.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

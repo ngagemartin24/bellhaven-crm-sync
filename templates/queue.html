@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block sub %}{% if run %}Run {{ when(run.finished_at) }} · {% if run.complete %}complete{% else %}incomplete{% endif %} · {{ run.found }} of {{ run.stated if run.stated is not none else '?' }} locations on the website · {{ run.accounts_read }} CRM accounts read · {{ open_count }} proposals{% else %}No run yet. Run <code>bellhaven-sync run</code> to read the website and the CRM.{% endif %}{% endblock %}
+{% block content %}
+{% if not shown %}
+  <section class="panel empty"><p>{% if location %}No open proposals for this location. <a href="/">Show all</a>{% else %}Nothing to review. Every proposal from the latest run has been decided; see <a href="/history">History</a>.{% endif %}</p></section>
+{% else %}
+<div class="workspace">
+  <section class="list panel" aria-label="Proposals">
+    <form class="toolbar" method="get" action="/">
+      <label class="visually-hidden" for="location">Location</label>
+      <select id="location" name="location">
+        <option value="">All locations ({{ locations|length }})</option>
+        {% for slug, title in locations %}<option value="{{ slug }}" {% if slug == location %}selected{% endif %}>{{ title }}</option>{% endfor %}
+      </select>
+      <button class="secondary" type="submit">Filter</button>
+      {% if location %}<a class="clear" href="/">Clear</a>{% endif %}
+    </form>
+    {% for section in sections %}
+      <h2 class="group"><span>{{ section.name }}</span><span class="num">{{ section.cards|length }}</span></h2>
+      <ul>
+      {% for c in section.cards %}
+        <li id="card-{{ c.id }}">
+          <a class="row {% if selected and c.id == selected.id %}selected{% endif %}" href="/?card={{ c.id }}{% if location %}&location={{ location }}{% endif %}#card-{{ c.id }}" {% if selected and c.id == selected.id %}aria-current="true"{% endif %}>
+            <span class="line1"><span class="who">{{ c.title }}</span>
+              {% if c.status in ('failed', 'needs-reconciliation', 'applying') %}<span class="pill bad">{{ status_words[c.status] }}</span>
+              {% elif c.status == 'blocked' %}<span class="pill warn">Held</span>
+              {% elif c.flag or c.evidence.get('warning') %}<span class="pill warn">Check</span>
+              {% elif c.band %}<span class="band">{{ c.band }}</span>{% endif %}</span>
+            <span class="line2">{% if c.operation and c.status in ('failed', 'needs-reconciliation') %}{{ c.operation.message }}{% else %}{{ c.summary }}{% endif %}</span>
+          </a>
+        </li>
+      {% endfor %}
+      </ul>
+    {% endfor %}
+  </section>
+  {% if selected %}{% include "_card.html" %}{% endif %}
+</div>
+{% endif %}
+{% endblock %}

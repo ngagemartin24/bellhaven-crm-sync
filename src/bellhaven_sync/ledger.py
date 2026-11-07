@@ -81,6 +81,15 @@ class Ledger:
         self._db.executescript(SCHEMA)
         self._lock = threading.RLock()
 
+    def close(self) -> None:
+        self._db.close()
+
+    def __enter__(self) -> "Ledger":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
     @contextmanager
     def tx(self):
         """One SQLite transaction; card and operation always move together inside one."""

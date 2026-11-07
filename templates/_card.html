@@ -1,0 +1,143 @@
+{% set c = selected %}
+{% set cmp = view.comparison(c) %}
+{% set ev = c.evidence %}
+<article class="item panel" aria-labelledby="item-title">
+  <header class="item-head">
+    <div class="item-title">
+      <h2 id="item-title">{{ c.title }}</h2>
+      <p class="tags"><span class="pill neutral">{{ c.section }}</span>{% if c.band %}<span class="band">{{ c.band }} confidence</span>{% endif %}<span class="state">{{ status_words[c.status] }}</span></p>
+      <p class="summary">{{ c.summary }}</p>
+    </div>
+    {% if ev.site %}<p class="links"><a href="{{ ev.site.url }}" rel="noreferrer">Website page</a>{% for v in ev.crm %}{% set link = view.crm_link(v.account_id) %}{% if link %} · <a href="{{ link }}" rel="noreferrer">View {{ v.account_id[-6:] }} in CRM</a>{% endif %}{% endfor %}</p>
+    {% elif ev.crm %}<p class="links">{% for v in ev.crm %}{% set link = view.crm_link(v.account_id) %}{% if link %}{% if not loop.first %} · {% endif %}<a href="{{ link }}" rel="noreferrer">View {{ v.account_id[-6:] }} in CRM</a>{% endif %}{% endfor %}</p>{% endif %}
+  </header>
+
+  {% if c.flag or ev.get('warning') %}<p class="notice warn">{{ c.flag or ev.warning }}</p>{% endif %}
+  {% if c.status == 'blocked' %}<p class="notice warn">Held: the last website read was incomplete ({{ run.reason if run else 'unknown' }}). This comes back for review after a complete run.</p>{% endif %}
+  {% if c.operation and c.status in ('failed', 'needs-reconciliation') %}<p class="notice bad">{{ c.operation.message }}</p>{% endif %}
+
+  {% if ev.billing and ev.billing.rule and c.kind in ('chow', 'wrong_parent', 'possible_match') %}
+  <section class="block billing" aria-labelledby="bill-{{ c.id }}">
+    <h3 id="bill-{{ c.id }}">Billing rule</h3>
+    <div class="ledger">
+      <div><span class="label">Lifetime revenue</span><span class="figure num">{{ money(ev.billing.lifetime_revenue) }}</span><span class="test">{% if ev.billing.lifetime_revenue > 0 %}history{% else %}none{% endif %}</span></div>
+      <div><span class="label">Outstanding AR</span><span class="figure num">{{ money(ev.billing.outstanding_ar) }}</span><span class="test">{% if ev.billing.outstanding_ar > 0 %}owed{% else %}none{% endif %}</span></div>
+      <div class="route"><span class="label">Route</span><span class="verdict-text">{% if ev.billing.needs_chow %}Keep the old account, create a new one{% else %}Re-parent the existing account{% endif %}</span></div>
+    </div>
+    <p class="muted">{{ ev.billing.rule }}</p>
+  </section>
+  {% endif %}
+
+  {% set groups = view.change_groups(c) %}
+  {% if groups %}
+  <section class="block" aria-labelledby="changes-{{ c.id }}">
+    <h3 id="changes-{{ c.id }}">What changes in the CRM</h3>
+    {% for g in groups %}
+    <div class="record">
+      <p class="rec">{{ g.record }}{% if g.new %} <span class="muted">· created on approval</span>{% endif %}</p>
+      {% if g.new %}
+      <dl class="created">
+        {% for r in g.rows if not r.note %}<div><dt>{{ r.field }}</dt><dd>{{ r.after }}</dd></div>{% endfor %}
+      </dl>
+      {% for r in g.rows if r.note %}<p class="note">Note: <span>{{ r.after }}</span></p>{% endfor %}
+      {% else %}
+      <table class="changes">
+        <thead><tr><th scope="col">Field</th><th scope="col">Now</th><th scope="col">After approval</th></tr></thead>
+        <tbody>
+        {% for r in g.rows %}
+          {% if r.note %}<tr><td>Note</td><td colspan="2" class="note">adds a line: <span>{{ r.after }}</span></td></tr>
+          {% else %}<tr><td>{{ r.field }}</td><td class="before">{{ r.before }}</td><td class="after">{{ r.after }}</td></tr>{% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% elif c.kind == 'attention' %}
+  <section class="block"><h3>What needs a decision</h3><p>{{ c.summary }}</p>
+    {% for x in ev.get('conflicts', []) %}<p class="muted">{{ x }}</p>{% endfor %}</section>
+  {% endif %}
+
+  {% if cmp %}
+  <section class="block" aria-labelledby="cmp-{{ c.id }}">
+    <h3 id="cmp-{{ c.id }}">Website and CRM side by side</h3>
+    <table class="compare">
+      <thead><tr><th scope="col"></th>{% if cmp.site %}<th scope="col">Website</th>{% endif %}{% for a in cmp.crm %}<th scope="col">CRM {{ a.account_id[-6:] }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for r in cmp.rows %}
+        <tr><th scope="row">{{ r.label }}</th>{% if cmp.site %}<td>{{ r.site }}</td>{% endif %}{% for v in r.crm %}<td class="{% if v.differs %}differs{% else %}same{% endif %}">{{ v.value }}</td>{% endfor %}</tr>
+      {% endfor %}
+        <tr><th scope="row">Parent</th>{% if cmp.site %}<td>—</td>{% endif %}{% for o in cmp.owners %}<td>{{ o.parent }}</td>{% endfor %}</tr>
+        <tr><th scope="row">Status · billing</th>{% if cmp.site %}<td>—</td>{% endif %}{% for o in cmp.owners %}<td>{{ o.status }} · <span class="num">{{ o.money }}</span></td>{% endfor %}</tr>
+      </tbody>
+    </table>
+    <p class="muted small">Values that differ from the website are in full ink; matching values are grey.</p>
+  </section>
+  {% endif %}
+
+  {% if ev.signals %}
+  <section class="block" aria-labelledby="sig-{{ c.id }}">
+    <h3 id="sig-{{ c.id }}">Why it matched</h3>
+    {% for s in ev.signals %}
+    <div class="signals">
+      <p class="cand"><span>{{ s.name }} <span class="id">{{ s.account_id[-6:] }}</span></span><span class="num">{{ s.score }} points{% if s.band %} · {{ s.band }}{% endif %}</span></p>
+      <ul>{% for g in s.signals %}<li class="{{ 'yes' if g.ok else 'no' }}">{% if g.ok %}<svg class="mark-ok" viewBox="0 0 16 16" width="12" height="12" role="img" aria-label="yes"><path d="M3 8.5 6.5 12 13 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>{% else %}<svg class="mark-no" viewBox="0 0 16 16" width="12" height="12" role="img" aria-label="no"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>{% endif %} {{ g.label }}{% if g.detail %} {{ g.detail }}{% endif %} <span class="pts num">{{ g.points if g.ok else 0 }}</span></li>{% endfor %}</ul>
+      {% if s.po_box %}<p class="muted small">The CRM's billing street is a PO Box, so the street cannot be compared; it is kept.</p>{% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
+  {% if ev.ruled_out or ev.conflicts or ev.get('same_address') %}
+  <section class="block" aria-labelledby="ro-{{ c.id }}">
+    <h3 id="ro-{{ c.id }}">Considered and ruled out</h3>
+    <ul class="plain">
+      {% for r in ev.ruled_out %}<li>{{ r.name }} <span class="id">{{ r.account_id[-6:] }}</span>: {{ r.reason }}</li>{% endfor %}
+      {% for x in ev.conflicts %}<li>{{ x }}</li>{% endfor %}
+      {% for x in ev.get('same_address', []) %}<li>Same address: {{ x.name if x is mapping else x }}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% set alts = view.alternatives(c) %}
+  {% if alts or c.prior_rejections %}
+  <section class="block">
+    {% if alts %}<h3>Other choices for this location</h3>
+    <ul class="plain">{% for a in alts %}<li><a href="/?card={{ a.id }}#card-{{ a.id }}">{{ a.section }}: {{ a.summary }}</a> <span class="muted">({{ status_words[a.status] }})</span></li>{% endfor %}</ul>
+    <p class="muted small">Approving one choice closes the others.</p>{% endif %}
+    {% if c.prior_rejections %}<h3>Rejected before</h3>
+    <ul class="plain">{% for p in c.prior_rejections %}<li>{{ p.field }} = {{ p.value }} <span class="muted">rejected {{ when(p.at) }}</span></li>{% endfor %}</ul>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if c.steps %}
+  <details class="block writes">
+    <summary>The API calls approval makes ({{ c.steps|length }})</summary>
+    <ol class="calls">{% for w in view.writes(c) %}<li><code>{{ w.line }}</code><pre>{{ w.body }}</pre></li>{% endfor %}</ol>
+  </details>
+  {% endif %}
+
+  <footer class="actions">
+    {% if c.status == 'pending' and c.kind == 'attention' %}
+      <form method="post" action="/cards/{{ c.id }}/acknowledge"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ c.version }}"><button class="primary" type="submit">Acknowledge</button></form>
+    {% elif c.status == 'pending' %}
+      <form method="post" action="/cards/{{ c.id }}/approve" class="decide">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ c.version }}">
+        <label for="note-{{ c.id }}">Reviewer note <span class="muted">(optional, kept with the decision)</span></label>
+        <input id="note-{{ c.id }}" name="note" type="text" maxlength="300" autocomplete="off">
+        <span class="buttons"><button class="primary" type="submit">Approve</button><button class="secondary" type="submit" formaction="/cards/{{ c.id }}/reject">Reject</button></span>
+      </form>
+    {% elif c.status == 'failed' %}
+      <form method="post" action="/cards/{{ c.id }}/retry"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ c.version }}"><button class="primary" type="submit">Retry</button>
+      {% if c.operation and not (c.operation.steps|selectattr('wrote')|list) %}<button class="secondary" type="submit" formaction="/cards/{{ c.id }}/discard">Discard</button>{% endif %}</form>
+    {% elif c.status == 'needs-reconciliation' %}
+      <form method="post" action="/cards/{{ c.id }}/check-again"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="version" value="{{ c.version }}"><button class="primary" type="submit">Check again</button>
+      {% if c.operation and not (c.operation.steps|selectattr('wrote')|list) %}<button class="secondary" type="submit" formaction="/cards/{{ c.id }}/discard">Discard</button>{% endif %}</form>
+    {% elif c.status == 'blocked' %}
+      <p class="muted">No action until a complete run.</p>
+    {% else %}
+      <p class="muted">{{ status_words[c.status] }}.</p>
+    {% endif %}
+  </footer>
+</article>
