@@ -1,4 +1,4 @@
-"""Every judgment call in one file (SC-7). Each rule has a test; change a rule here and run the tests.
+"""The main judgment calls in one file (SC-7). Each rule has a test; change a rule here and run the tests.
 
 The matching thresholds, the billing rule, the duplicate-survivor order, which fields sync, what happens to an
 account that left the website, and the wording of CRM notes all live here.

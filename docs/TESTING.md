@@ -98,6 +98,6 @@ Recorded with Playwright on a test copy, captions and a visible cursor added, no
 ## Run the checks yourself
 
 ```
-uv run pytest -q          # 203 tests, about 25 s
+uv run pytest -q          # 203 tests, about 30 s
 uv run pytest -m e2e -q   # the browser test (needs `uv run playwright install chromium` once)
 ```
