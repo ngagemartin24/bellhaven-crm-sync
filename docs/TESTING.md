@@ -73,7 +73,7 @@ Discard remain safe").
 | Dimension | Score | Evidence |
 |---|---|---|
 | Accessibility | 3 | axe 0 violations and all 15 manual findings fixed; screen readers not tested |
-| Performance | 4 | Lighthouse Performance 100 everywhere; no JavaScript; one stylesheet and one font |
+| Performance | 4 | Lighthouse Performance 100 everywhere; no JavaScript; one stylesheet and two variable fonts (Geist, Geist Mono) |
 | Theming | 3 | every colour is a token (0 hard-coded colours outside `:root`, 0 inline styles); light theme only |
 | Responsive | 4 | checked at 1440, 1280, tablet, 390 and 320 px and at 200% and 400% zoom; targets pass WCAG 2.5.8 |
 | Implementation integrity | 4 | every element serves a review decision; impeccable's detector script is not installed here, so this is by hand |

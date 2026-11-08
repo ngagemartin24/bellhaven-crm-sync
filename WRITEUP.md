@@ -23,7 +23,7 @@ ZIP, phone or administrator). Same town alone is never a match. Then:
 | Band | When | What happens |
 |---|---|---|
 | High | same street at the same city or ZIP | linked |
-| Medium | same place plus the administrator or the phone, when the street can't be compared (Ashtabula's billing street is a PO Box) | linked, evidence shown |
+| Medium | same place plus the administrator or the phone, where the street differs or can't be compared (Ashtabula's billing street is a PO Box) | linked, evidence shown |
 | Low | same place and a similar name, nothing else | shown as a possible match only; never acted on by itself |
 
 Points (street 50, administrator 25, phone 10, ZIP 5, city 5, name up to 10) order the candidates and appear as
@@ -33,8 +33,9 @@ the billing route. Several strong matches at the same full address with a compat
 duplicates. The survivor is chosen in this order: billing history, already under Bellhaven, has contacts,
 closest to the website, came from Harborview (which Bellhaven bought in 2025), lowest id.
 
-Every one of these judgment calls lives in `src/bellhaven_sync/rules.py`, each pinned by a test, so changing
-one is a one-file edit.
+The bands, weights, billing rule, survivor order, synced fields and note format live in
+`src/bellhaven_sync/rules.py`, each pinned by a test, so changing one of them is a one-file edit. Text cleaning
+(street abbreviations, the care-label mapping) is in `normalize.py`.
 
 **The billing rule** runs before every parent change and again right before the write. With revenue history
 and outstanding AR, the old account is left exactly as it is except `chow_current_account`, and a new account
@@ -59,7 +60,7 @@ is created under Bellhaven. Otherwise the account moves directly.
 | Ashtabula | Billing street PO Box 517; phone and administrator match | Medium match; the PO Box billing street is kept |
 | Portsmouth | CRM ZIP 45626, website 45662 | ZIP corrected |
 | 15 accounts | Phone differs from the website | Phone set to the website's |
-| 7 accounts | Old or slightly different names (Riverbend Manor Care Center is now Chagrin Falls) | Renamed to the website's exact name |
+| 7 more accounts | Old or slightly different names (Riverbend Manor Care Center is now Chagrin Falls) | Renamed to the website's exact name (9 renames in all, with Kettering and Zanesville) |
 | Street spellings | "Ln" vs "Lane" and similar on otherwise identical addresses | Left alone: rewriting them adds noise and no information |
 | Administrators | Four accounts list a different administrator; five list none | Shown as evidence, not written (see next) |
 | Harborview's parent account | All its facilities now sit under Bellhaven | Left alone: the brief is about facilities |
@@ -67,7 +68,7 @@ is created under Bellhaven. Otherwise the account moves directly.
 That is 42 proposals: 41 approved, 1 rejected (the Union Square look-alike). The CRM ends with 127 accounts
 (6 created) and 73 contacts (6 created, 1 moved).
 
-Once every decision was applied (2026-11-08 15:43 UTC), `scripts/verify.py` against the real CRM printed
+After the last approval was written (2026-11-08 15:37 UTC), `scripts/verify.py` against the real CRM printed
 `PASS: the CRM matches the expected end state (127 accounts and 73 contacts checked)`, and a second run read
 35 of 35 locations and 127 accounts and proposed 0 changes.
 
@@ -105,8 +106,8 @@ record.
    with buyer and seller, and a file naming each facility's owners. Matching those against the CRM would catch
    a sale before the operator updates its website, for every operator in the CRM. Assisted living is
    licensed by each state, so it would need state sources.
-2. **Every operator.** One settings row per parent company (website plus CRM account). The
-   page parsing is the only Bellhaven-specific part.
+2. **Every operator.** One settings row per parent company (website plus CRM account). The page parsing,
+   the Harborview tie-break and the note wording would need adapting; the matching and the write path would not.
 3. **Administrators.** Propose adding the website's administrator where none is listed and retiring the old
    one where they differ, as its own reviewed card.
 4. **Learning from decisions.** Every approve and reject is a labelled example. Measure which signals predicted

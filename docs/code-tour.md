@@ -11,7 +11,7 @@ against a real CRM.
 | 2. Read the website | `scrape.py`: `scrape`, `parse_community`, `stated_count` | Crawl the home page, About page and every directory page; collect every community link; read each community page; compare the count with the "35 communities" the home page states. |
 | 3. Clean the text | `normalize.py` | "Rd" = "Road", phone digits only, ZIP to five digits, the site's care labels to the CRM's care types. |
 | 4. Match | `match.py`: `signals`, `match_location` | For each location, every CRM account in the same state that shares a city, ZIP, phone or administrator is scored. Duplicates are the strong (High) matches at the same full address with a compatible care type. |
-| 5. Decide | `rules.py` | Every judgment call: the weights and the High/Medium/Low bands, the billing rule (`needs_chow`), which duplicate survives, which fields sync, what to do with an account that left the website, the note format. |
+| 5. Decide | `rules.py` | The main judgment calls: the weights and the High/Medium/Low bands, the billing rule (`needs_chow`), which duplicate survives, which fields sync, what to do with an account that left the website, the note format. |
 | 6. Propose | `propose.py`: `propose` | Each needed change becomes a card: what changes (for the ledger), the exact API calls in order (for apply), and the evidence (for the reviewer). |
 | 7. Remember | `ledger.py` | SQLite: runs, cards, decisions, how each location was classified. |
 | 8. Review | `app.py`, `templates/` | Queue, Locations, History. Approve and Reject are plain HTML forms. |

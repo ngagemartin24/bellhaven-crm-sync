@@ -4,7 +4,7 @@
 
 Scope: read of `src/bellhaven_sync/{app,cli,config,crm,apply}.py` and `templates/`, live probes of the test copy
 `http://127.0.0.1:8775` only (8771, 8773, 8774 and railway.app never touched), in-process TestClient runs over a
-modified copy of the snapshot. Nothing in the repo was changed. Scripts: `scripts/` beside this file.
+modified copy of the snapshot. Nothing in the repo was changed. The probe scripts were kept outside the repo.
 Limit: `app.py:303` (the line that picks the anti-forgery token) was redacted in my read, so I describe it from
 behavior (probe 4 and 5 below), not from source.
 

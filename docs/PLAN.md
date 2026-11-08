@@ -1,5 +1,8 @@
 # Bellhaven CRM sync Implementation Plan
 
+> **Historical record.** This is the build plan as written on 2026-11-07, before the build, kept unchanged.
+> What changed during the build is in DESIGN.md (the "As built" note and Appendix B) and docs/TESTING.md.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A daily pipeline that matches Bellhaven's website locations to CRM accounts and proposes fixes, plus a local review app where only an approval writes to the CRM.

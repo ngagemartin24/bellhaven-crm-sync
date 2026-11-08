@@ -3,7 +3,7 @@
 # Accessibility audit: Bellhaven CRM sync review app (WCAG 2.2 AA)
 
 Target: test copy at 127.0.0.1:8774 only. Date: 2026-11-08. Nothing in the app's code was changed.
-Method: axe-core 4.10.3 (tags wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa) in Playwright Chromium at 1280x800 and 390x844, plus scripted keyboard, geometry, contrast and reflow measurements. Scripts: `scripts/`. Axe JSON per page: `json/axe_<state>_<viewport>.json`. Screenshots: `shots/`.
+Method: axe-core 4.10.3 (tags wcag2a, wcag2aa, wcag21a, wcag21aa, wcag22aa) in Playwright Chromium at 1280x800 and 390x844, plus scripted keyboard, geometry, contrast and reflow measurements. The audit's scripts, raw axe JSON and screenshots were kept outside the repo.
 
 ## Summary
 

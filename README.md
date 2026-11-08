@@ -29,12 +29,16 @@ CRM API ─(read)────┘                         ▲                    
 - **Scrape.** Crawls the home page, About page and every directory page, collects every community link, and
   checks the count against the number the home page states. A short or failed read holds back every
   "gone from the website" proposal for that day.
-- **Match.** A location and an account must be in the same city and state and share a street, an
-  administrator or a phone number. Street, ZIP and administrator count most, the name somewhat, the phone
-  least. Each match is High, Medium or Low; a Low match is only ever offered as a possible match.
+- **Match.** A location and an account are compared only when they are in the same state and share a city,
+  ZIP, phone number or administrator. The same street at the same city or ZIP is a High match. The same place
+  with the administrator or phone matching, where the street differs or is a PO Box, is Medium. The same place
+  and a similar name with nothing else is Low, and a Low match is only ever offered as a possible match.
+  Points (street 50, administrator 25, phone 10, ZIP 5, city 5, name up to 10) order the candidates; the band
+  decides.
 - **Propose.** Each needed change becomes a card: a change of ownership, a duplicate group, a wrong parent,
-  a new account, an account gone from the website, a possible match, a rename, or a phone/ZIP fix. Every
-  judgment call (score weights, the billing rule, which duplicate survives, what syncs) lives in
+  a new account, an account gone from the website, a possible match, a rename, or a phone/ZIP fix. The main
+  judgment calls (bands and weights, the billing rule, which duplicate survives, what syncs, what happens to an
+  account that left the website, the note format) live in
   [`src/bellhaven_sync/rules.py`](src/bellhaven_sync/rules.py).
 - **Billing rule.** Before an account moves to a different parent: with revenue history *and* outstanding
   AR, the old account is left exactly as it is, a new account is created under the right parent, and the
@@ -54,8 +58,9 @@ write's request, the CRM's answer and the values it replaced).
 
 [`deploy/crontab`](deploy/crontab) runs `bellhaven-sync run` at 11:30 UTC every day (06:30 US Eastern in
 winter) under `flock`, so runs never overlap. [`deploy/github-actions-daily.yml`](deploy/github-actions-daily.yml)
-is the same job as a GitHub Actions workflow; it sits outside `.github/workflows/`, so it does not run.
-In Actions the ledger would be kept on a `state` branch between runs.
+sketches the same daily run as a GitHub Actions workflow; it sits outside `.github/workflows/`, so it does
+not run. It keeps the ledger on a `state` branch between runs. A reviewer's app would have to use that same
+ledger (download it before reviewing, push it back after), which the sketch does not automate.
 
 ## Tests
 

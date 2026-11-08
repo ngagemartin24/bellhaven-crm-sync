@@ -1,7 +1,15 @@
 # Bellhaven CRM sync: design
 
-Status: v4, 2026-11-07, revised after three independent review rounds by GPT-6-Astra and a spec/plan
-consistency check (dispositions in Appendix B). Author: Gage Martin, built with Claude Code. Every decision traces to Appendix A (ids like `D4`).
+Status: v5, 2026-11-07, revised after four independent review rounds by GPT-6-Astra and a spec/plan
+consistency check (dispositions in Appendix B).
+
+> **As built (2026-11-08).** This spec was written before the build and is kept as written; Appendix B records
+> every later review. Where the real run differed: the first real approvals were Marietta and Kettering, not
+> the Grove City and Batavia cards planned in section 2; Gage made two decisions in the app himself and a
+> browser script clicked the other 40 through the same buttons on his instruction (section 15); the demo is a
+> captioned recording of the real CRM, narrated with an ElevenLabs clone of his voice. The planned
+> `docs/api-notes.md` and repo cheat sheet were not kept; what the real CRM showed is in docs/TESTING.md
+> ("Found in real use"). Author: Gage Martin, built with Claude Code. Every decision traces to Appendix A (ids like `D4`).
 
 ## 1. Purpose
 
