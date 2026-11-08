@@ -84,6 +84,7 @@ class Card:
     steps: tuple[Step, ...]
     evidence: dict
     alt_group: str | None
+    needs_complete_read: bool = False  # rests on a location being absent from the website (8.6, SC-6)
 
     @property
     def change_keys(self) -> frozenset[str]:

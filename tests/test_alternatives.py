@@ -15,7 +15,7 @@ def test_two_alternatives_one_wins(tmp_path):
 def test_owner_retries_and_finishes(tmp_path):  # round 3, P5
     l, crm = ready(tmp_path)
     new, pm = union_square_cards(l)
-    crm.fail_next("POST", 500, "boom")
+    crm.fail_next("POST", 422, "refused")
     assert approve(new.id, new.version, l, crm).status == "failed"
     assert retry(new.id, l, crm).status == "done" and l.card(pm.id).status == "superseded"
 
@@ -38,6 +38,6 @@ def test_owner_retries_and_discard_reopens(tmp_path):  # round 2, N4
     assert (
         approve(pm.id, pm.version, l, crm).status == "refused"
     )  # the group belongs to the new-account operation
-    assert discard(new.id, l).status == "done" and l.card(pm.id).status == "pending"
+    assert discard(new.id, l, crm).status == "done" and l.card(pm.id).status == "pending"
     new2 = only(run_after(l, crm), kind="new_account", slug="bellhaven-at-union-square")
     assert approve(new2.id, new2.version, l, crm).status == "done" and l.card(pm.id).status == "superseded"

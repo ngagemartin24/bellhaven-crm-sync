@@ -6,6 +6,7 @@ Equal to what was reviewed: write. Already at the target: done, no write. Anythi
 A create whose answer never arrived is never sent again; Check again looks for it instead.
 """
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -73,6 +74,24 @@ def _done_count(card) -> int:
     return sum(1 for s in op["steps"] if s["status"] == "done") if op else 0
 
 
+def _uncertain(e: CrmError) -> bool:
+    """A 4xx is a definite refusal (nothing written). A 5xx, or an answer we could not confirm, may have landed."""
+    return e.status == 0 or e.status >= 500
+
+
+def _waits_for_complete_read(card, ledger: Ledger) -> str | None:
+    """SC-6: a change resting on a location's absence is applied only while the latest website read is complete."""
+    if not card.needs_complete_read:
+        return None
+    run = ledger.latest_run()
+    if run is None or not run["complete"]:
+        return (
+            "The latest website read was incomplete; this change rests on the location being absent from the "
+            "website, so it waits for a complete read"
+        )
+    return None
+
+
 def _not_now(card) -> str:
     if card.status in ("done", "rejected", "acknowledged", "superseded", "discarded"):
         return "Already decided"
@@ -106,6 +125,30 @@ def _changed(step: Step, rec: dict, m: int) -> str | None:
                 f"Changed since review at step {step.n} of {m}: {field} is now {_show(rec.get(field))}, "
                 f"not {_show(reviewed)} as reviewed"
             )
+    return None
+
+
+def _related_problem(step: Step, crm, m: int) -> str | None:
+    """The facts a relationship rests on, for records the step does not write: a duplicate's survivor is still a
+    live, separate account at the same place; a buyer is still the account at the old address."""
+    for rel in step.expect.get("related", []):
+        rid = rel["path"].rsplit("/", 1)[1]
+        rec = crm.get_account(rid)
+        label = rel.get("label") or rid
+        for field, reviewed in rel.get("fields", {}).items():
+            if not _same(rec.get(field), reviewed):
+                return (
+                    f"Changed since review at step {step.n} of {m}: {label} {field} is now "
+                    f"{_show(rec.get(field))}, not {_show(reviewed)} as reviewed"
+                )
+        for field, allowed in rel.get("one_of", {}).items():
+            if not any(_same(rec.get(field), v) for v in allowed):
+                return (
+                    f"Changed since review at step {step.n} of {m}: {label} {field} is now "
+                    f"{_show(rec.get(field))}, not {_show(allowed[0])} as reviewed"
+                )
+        if rel.get("active") and rec.get("status") == "Inactive":
+            return f"Changed since review at step {step.n} of {m}: {label} is now Inactive"
     return None
 
 
@@ -162,6 +205,9 @@ def _run(op_id: int, ledger: Ledger, crm) -> ApplyResult:
         # 11 step 3: every expectation about records that already exist, before the first write
         for s in todo:
             current = s
+            problem = _related_problem(s, crm, m)
+            if problem:
+                raise _Stop(problem)
             if s.method == "PATCH":
                 rec = _read(crm, s)
                 if not _at_target(s, rec, created):
@@ -182,28 +228,28 @@ def _run(op_id: int, ledger: Ledger, crm) -> ApplyResult:
     except _Stop as e:
         ledger.finish_operation(op_id, "failed", str(e))
         return ApplyResult("failed", done, m, str(e))
-    except CrmError as e:
-        message = f"Failed at step {current.n} of {m}: {e.message}"
-        if current.n in {s["n"] for s in ledger.operation(op_id)["steps"]}:
-            ledger.step_failed(op_id, current.n, e.status, e.message)
-        ledger.finish_operation(op_id, "failed", message)
-        return ApplyResult("failed", done, m, message)
-    except requests.RequestException as e:
-        step_log = {s["n"]: s for s in ledger.operation(op_id)["steps"]}
-        if current.method == "POST" and current.n in step_log:
+    except (CrmError, requests.RequestException) as e:
+        sent = current.n in {s["n"] for s in ledger.operation(op_id)["steps"]}
+        definite = isinstance(e, CrmError) and not _uncertain(e)
+        if not sent or definite:
+            message = f"Failed at step {current.n} of {m}: " + (
+                e.message if isinstance(e, CrmError) else f"no answer from the CRM ({type(e).__name__})"
+            )
+            if sent:
+                ledger.step_failed(op_id, current.n, e.status, e.message)
+            ledger.finish_operation(op_id, "failed", message)
+            return ApplyResult("failed", done, m, message)
+        why = e.message if isinstance(e, CrmError) else f"no answer, {type(e).__name__}"
+        if current.method == "POST":
             message = (
-                f"No answer to the create at step {current.n} of {m} ({type(e).__name__}); it may have "
-                "landed. Check again looks for it; it is never sent twice"
+                f"The create at step {current.n} of {m} may have landed ({why}). Check again looks for it; "
+                "it is never sent twice"
             )
             ledger.step_unknown(op_id, current.n, message)
             ledger.finish_operation(op_id, "needs-reconciliation", message)
             return ApplyResult("needs-reconciliation", done, m, message)
-        message = (
-            f"Failed at step {current.n} of {m}: no answer from the CRM ({type(e).__name__}); "
-            "Retry checks whether it landed"
-        )
-        if current.n in step_log:
-            ledger.step_failed(op_id, current.n, None, message)
+        message = f"Step {current.n} of {m} may have landed ({why}); Retry checks the CRM and finishes it"
+        ledger.step_unknown(op_id, current.n, message)
         ledger.finish_operation(op_id, "failed", message)
         return ApplyResult("failed", done, m, message)
     ledger.finish_operation(op_id, "done")
@@ -213,8 +259,16 @@ def _run(op_id: int, ledger: Ledger, crm) -> ApplyResult:
 def _patch(step: Step, op_id: int, ledger: Ledger, crm, created: dict[int, str], m: int) -> None:
     rec = _read(crm, step)
     if _at_target(step, rec, created):
-        ledger.step_intent(op_id, step.n, "PATCH", step.path, {}, None, step.expect)
-        ledger.step_done(op_id, step.n, None, None, None, wrote=False)
+        prior = next((s for s in ledger.operation(op_id)["steps"] if s["n"] == step.n), None)
+        if prior and prior["body"] not in (None, "{}", "null"):
+            # an earlier attempt sent this write: keep its request and before-values as the record
+            landed = prior["status"] in ("intent", "unknown")
+            ledger.step_done(
+                op_id, step.n, None, {"confirmed": "found at the target on a later read"}, None, landed
+            )
+        else:
+            ledger.step_intent(op_id, step.n, "PATCH", step.path, {}, None, step.expect)
+            ledger.step_done(op_id, step.n, None, None, None, wrote=False)
         return
     problem = _changed(step, rec, m)
     if problem:
@@ -246,7 +300,7 @@ def _post(step: Step, op_id: int, ledger: Ledger, crm, created: dict[int, str], 
 
 
 # ---- the actions -------------------------------------------------------------------------------------
-def approve(card_id: str, version: str, ledger: Ledger, crm) -> ApplyResult:
+def approve(card_id: str, version: str, ledger: Ledger, crm, note: str = "") -> ApplyResult:
     card = ledger.card(card_id)
     if card.status != "pending":
         return _refused(card, _not_now(card))
@@ -254,7 +308,10 @@ def approve(card_id: str, version: str, ledger: Ledger, crm) -> ApplyResult:
         return _refused(card, "Needs attention cards are acknowledged, not applied")
     if card.version != version:
         return _refused(card, "This card changed since you opened it; review it again")
-    op_id = ledger.claim(card_id, version)
+    blocked = _waits_for_complete_read(card, ledger) or ledger.claim_conflict(card_id)
+    if blocked:
+        return _refused(card, blocked)
+    op_id = ledger.claim(card_id, version, note)
     if op_id is None:
         if card.alt_group:
             return _refused(card, "Another choice for this location is being applied")
@@ -284,6 +341,9 @@ def retry(card_id: str, ledger: Ledger, crm) -> ApplyResult:
     card = ledger.card(card_id)
     if card.status != "failed" or not card.operation:
         return _refused(card, _not_now(card))
+    blocked = _waits_for_complete_read(card, ledger)
+    if blocked:
+        return _refused(card, blocked)
     if not ledger.reopen_operation(card.operation["id"], "failed"):
         return _refused(card, "Not available now")
     return _run(card.operation["id"], ledger, crm)
@@ -304,6 +364,9 @@ def check_again(card_id: str, ledger: Ledger, crm, now: Callable[[], datetime] =
     card = ledger.card(card_id)
     if card.status != "needs-reconciliation" or not card.operation:
         return _refused(card, _not_now(card))
+    blocked = _waits_for_complete_read(card, ledger)
+    if blocked:
+        return _refused(card, blocked)
     op = card.operation
     m = len(card.steps)
     log = {s["n"]: s for s in op["steps"]}
@@ -349,12 +412,31 @@ def check_again(card_id: str, ledger: Ledger, crm, now: Callable[[], datetime] =
     return _run(op["id"], ledger, crm)
 
 
-def discard(card_id: str, ledger: Ledger, now: Callable[[], datetime] = utcnow) -> ApplyResult:
+def _landed_update(card, crm) -> int | None:
+    """An update this operation sent whose answer never arrived: does the CRM already show it?"""
+    for s in card.operation["steps"]:
+        if s["method"] != "PATCH" or s["status"] == "done" or s["body"] in (None, "{}", "null"):
+            continue
+        body = json.loads(s["body"])
+        kind, rid = s["path"].strip("/").split("/", 1)
+        rec = crm.get_account(rid) if kind == "accounts" else crm.get_contact(rid)
+        if all(_same(rec.get(k), v) for k, v in body.items()):
+            return s["n"]
+    return None
+
+
+def discard(card_id: str, ledger: Ledger, crm, now: Callable[[], datetime] = utcnow) -> ApplyResult:
     card = ledger.card(card_id)
     if card.status not in ("failed", "needs-reconciliation") or not card.operation:
         return _refused(card, _not_now(card))
     if any(s["wrote"] for s in card.operation["steps"]):
         return _refused(card, "A write already landed; Retry or Check again finishes it")
+    try:
+        landed = _landed_update(card, crm)
+    except (CrmError, requests.RequestException) as e:
+        return _refused(card, f"Could not read the CRM to check whether a write landed: {e}")
+    if landed:
+        return _refused(card, f"Step {landed} landed (the CRM shows it); Retry finishes the change")
     if not ledger.discard(card.operation["id"], now()):
         return _refused(
             card,

@@ -194,12 +194,22 @@ def _short(a: dict | None) -> str:
 def compare(answers: dict, ledger: Ledger) -> list[dict]:
     """Every subject where the blind answer differs from ours; flags that subject's open cards."""
     ours = our_answers(ledger)
+    # a duplicate copy we retire inside a location's group, listed again as a leftover with the same survivor
+    retired = {
+        (aid, loc["survivor"])
+        for loc in ours["locations"].values()
+        if loc.get("survivor")
+        for aid in loc.get("account_ids") or []
+        if aid != loc["survivor"]
+    }
     rows = []
     for group, norm in (("locations", _normalize_location), ("leftovers", _normalize_leftover)):
         mine, theirs = ours[group], answers.get(group, {})
         for subject in sorted(set(mine) | set(theirs)):
             a, b = norm(mine.get(subject)), norm(theirs.get(subject))
             if a == b:
+                continue
+            if a is None and b and b["outcome"] == "duplicate" and (subject, b["target"]) in retired:
                 continue
             cards = [
                 c

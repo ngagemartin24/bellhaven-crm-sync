@@ -5,6 +5,7 @@ account that left the website, and the wording of CRM notes all live here.
 """
 
 from datetime import date
+from decimal import Decimal
 
 from .models import Account, Location, Signals
 from .normalize import is_po_box, map_care, streets_equivalent
@@ -45,15 +46,35 @@ def band(s: Signals) -> str | None:
 
 
 # ---- money and the billing rule (8.3) --------------------------------------------------------------
-def money(v) -> int:
+def money(v) -> Decimal:
+    """Exact amounts: $0.50 of AR is outstanding AR (never truncated to 0). Unreadable text raises."""
     if v is None or v == "":
-        return 0
-    return int(float(v))
+        return Decimal(0)
+    if isinstance(v, float):
+        return Decimal(repr(v))
+    return Decimal(str(v).strip())
+
+
+def dollars(v) -> str:
+    d = money(v)
+    d = d.quantize(Decimal(1)) if d == d.to_integral_value() else d.quantize(Decimal("0.01"))
+    return f"${d:,}"
 
 
 def needs_chow(acc: Account) -> bool:
     """The SOP: revenue history AND outstanding AR means keep the old account and create a new one."""
     return money(acc.get("lifetime_revenue")) > 0 and money(acc.get("outstanding_ar")) > 0
+
+
+# ---- when the evidence is ambiguous (7.3, 8.7) ------------------------------------------------------
+def medium_match(medium_ids: list[str]) -> str | None:
+    """Partial (Medium) matches and no strong one: exactly one is accepted; two or more go to a person."""
+    return medium_ids[0] if len(medium_ids) == 1 else None
+
+
+def look_alike_needs_person(acc: Account, operator_id: str) -> bool:
+    """A Low look-alike under another parent whose link would need the billing route: a person decides."""
+    return acc.get("parent_id") != operator_id and needs_chow(acc)
 
 
 # ---- who takes part (7.1) ---------------------------------------------------------------------------

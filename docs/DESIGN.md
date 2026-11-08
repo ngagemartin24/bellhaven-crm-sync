@@ -449,7 +449,10 @@ banner and sort first in their section. The blind model check (17.1) uses this.
      back for review, and cleared AR sends Tiffin back), `parent_id`, `duplicate_of_account` and
      `chow_current_account` for a retirement or a CHOW pointer, and a contact's `account_id` for a move;
    - a create: that no Active account under the operator has the same full address; for a contact, that the
-     target account has no active contact with the same name.
+     target account has no active contact with the same name;
+   - the records a relationship rests on but the step does not write (`related`): a duplicate's survivor is
+     still a live, separate account at the reviewed place (or the website's); a buyer is still the account at
+     the old address with the same care type.
 3. **Before the first write**, every step's expectations about records that already exist are checked
    together, so a change of ownership whose old account no longer qualifies stops before anything is created.
    **Before each unfinished step**, its own expectations are checked again: read the record (or search, for a
@@ -461,7 +464,8 @@ banner and sort first in their section. The blind model check (17.1) uses this.
 4. **Writes.** A PATCH is confirmed by its response showing the targets; a note line is appended once (skipped
    when already present). Before a POST, its intent and full identity are stored; on success the new id is
    stored at once.
-5. **Unknown outcome** (timeout, a crash between sending a POST and recording its answer) → needs-reconciliation;
+5. **Unknown outcome** (no answer, a 5xx, an answer that does not confirm the write, a crash between sending a
+   POST and recording its answer). A create → needs-reconciliation;
    the system never sends that POST again, and the operation keeps its reservations. **Check again** searches
    records with `created_by_candidate = true` and the step's full identity (for an account: name, street, city,
    state, ZIP, parent; for a contact: name, title, account) that no other operation has adopted: exactly one →
@@ -471,9 +475,17 @@ banner and sort first in their section. The blind model check (17.1) uses this.
    (thirty times the 20-second request timeout) and a Check again made after that found nothing; the next run
    proposes the location again, and that create re-checks that no account exists at the address. The CRM
    offers no create-once key, so this is the strongest guarantee available; the residual case is in section 20.
-6. **A write error** → failed with "Failed at step n of m: <API message>". **Retry** resumes at the first
-   unfinished step under the same checks.
-7. **No undo button (F2 revised).** History keeps every write's before-values; a mistake is corrected on
+   An update with an unknown outcome → failed ("may have landed"); Retry reads the record and finishes it,
+   keeping the original request and before-values in the step log. **Discard** reads every update the
+   operation sent and is refused when the CRM already shows one.
+6. **A definite refusal** (a 4xx: nothing was written) → failed with "Failed at step n of m: <API message>".
+   **Retry** resumes at the first unfinished step under the same checks.
+7. **Claims and the daily run.** Approve is refused while a change on the card is already decided or a record it
+   writes belongs to an unfinished operation. A run records its cards in one transaction that reads decisions
+   and reservations again, so nothing decided while it was working comes back. Cards resting on a location's
+   absence (gone, sold) are blocked by an incomplete read and their Approve, Retry and Check again wait for a
+   complete one. A "none of these" card stays until acknowledged.
+8. **No undo button (F2 revised).** History keeps every write's before-values; a mistake is corrected on
    Gage's explicit yes from those values.
 
 ## 12. CRM API contract (F2)
@@ -766,4 +778,22 @@ unchanged and re-derived (42 / 41 + 1 / 127 / 73). Round-2 items: 10 resolved, 4
 | Consistency B1 Discard rule vague | 11 step 5 |
 | Consistency F3 proportion | 18: two-layer code tour |
 | Consistency F4 wording | 8.5, 12, 13 |
+
+## Appendix B5. Code review, round 5 (GPT-6-Astra, 2026-11-07)
+
+Verdict FAIL at 60808f8: AC-3, AC-4 and AC-8 passed; 6 Major and 3 Minor defects. Each was checked against the
+code before fixing, and each now has a test (`tests/test_write_safety.py` unless noted).
+
+| Finding | Fix |
+|---|---|
+| 1 fractional AR truncated by `int(float())` | `rules.money` returns an exact Decimal; `test_match::test_fractional_balances_count` |
+| 2 survivor and buyer facts never re-checked | 11 step 2 `related`; buyer address and care type in the sale's expectations |
+| 3 incomplete read stopped only pending gone cards | `needs_complete_read` on every absence card; blocked, and Approve/Retry/Check again gated |
+| 4 a run could revive a change decided mid-run | 11 step 7: decisions and reservations re-read inside the recording transaction; claim conflicts refused |
+| 5 a lost update answer or a 5xx create could be discarded | 11 steps 5-6: uncertain vs definite; Discard reads the CRM |
+| 6 verifier checked a few fields of created records | every field of created accounts and administrators, notes included; `test_verify` |
+| 7 Retry overwrote the first attempt's request | the original intent is kept |
+| 8 the approval note was dropped | passed through to the decision |
+| 9 "none of these" disappeared on the next run | ledger-raised cards are never superseded |
+| AC-7 two ambiguity rules outside `rules.py` | `rules.medium_match`, `rules.look_alike_needs_person`, each tested |
 

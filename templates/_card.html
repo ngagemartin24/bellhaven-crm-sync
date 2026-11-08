@@ -20,8 +20,8 @@
   <section class="block billing" aria-labelledby="bill-{{ c.id }}">
     <h3 id="bill-{{ c.id }}">Billing rule</h3>
     <div class="ledger">
-      <div><span class="label">Lifetime revenue</span><span class="figure num">{{ money(ev.billing.lifetime_revenue) }}</span><span class="test">{% if ev.billing.lifetime_revenue > 0 %}history{% else %}none{% endif %}</span></div>
-      <div><span class="label">Outstanding AR</span><span class="figure num">{{ money(ev.billing.outstanding_ar) }}</span><span class="test">{% if ev.billing.outstanding_ar > 0 %}owed{% else %}none{% endif %}</span></div>
+      <div><span class="label">Lifetime revenue</span><span class="figure num">{{ money(ev.billing.lifetime_revenue) }}</span><span class="test">{% if ev.billing.has_revenue %}history{% else %}none{% endif %}</span></div>
+      <div><span class="label">Outstanding AR</span><span class="figure num">{{ money(ev.billing.outstanding_ar) }}</span><span class="test">{% if ev.billing.has_ar %}owed{% else %}none{% endif %}</span></div>
       <div class="route"><span class="label">Route</span><span class="verdict-text">{% if ev.billing.needs_chow %}Keep the old account, create a new one{% else %}Re-parent the existing account{% endif %}</span></div>
     </div>
     <p class="muted">{{ ev.billing.rule }}</p>

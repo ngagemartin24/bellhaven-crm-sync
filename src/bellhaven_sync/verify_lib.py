@@ -63,23 +63,39 @@ def diff_against_expected(crm, snapshot_dir: Path, expected_path: Path) -> list[
             continue
         a = accounts[hits[0]]
         created_for[row["slug"]] = hits[0]
-        for f in CREATED_FIELDS:
-            if not _same(a.get(f), row[f]):
-                out.append(f"{row['slug']} {f}: expected {row[f]!r}, got {a.get(f)!r}")
-        if a.get("parent_id") != operator_id:
-            out.append(f"{row['slug']} parent_id: expected the operator, got {a.get('parent_id')!r}")
-        admins = [
-            c
-            for c in contacts.values()
-            if c.get("account_id") == hits[0]
-            and c.get("name") == row["administrator"]
-            and c.get("title") == "Administrator"
-            and c.get("is_active")
-        ]
-        if len(admins) != 1:
+        # every field of a created record: named ones as expected, the parent, the note; all else empty or zero
+        for f in sorted(set(a) - IGNORED - {"account_id", "note"}):
+            want = row[f] if f in CREATED_FIELDS else (operator_id if f == "parent_id" else "")
+            if not _same(a.get(f), want):
+                out.append(f"{row['slug']} {f}: expected {want!r}, got {a.get(f)!r}")
+        note = a.get("note") or ""
+        if not note:
+            out.append(f"{row['slug']} note: expected the creation note, got nothing")
+        for text in row.get("note_contains", []):
+            if text not in note:
+                out.append(f"{row['slug']} note: expected to contain {text!r}")
+        people = [c for c in contacts.values() if c.get("account_id") == hits[0]]
+        if not row.get("administrator"):
+            if people:
+                out.append(f"{row['slug']} contacts: expected none, found {len(people)}")
+            continue
+        if len(people) != 1:
             out.append(
-                f"{row['slug']} administrator {row['administrator']!r}: expected 1 active contact, found {len(admins)}"
+                f"{row['slug']} administrator {row['administrator']!r}: expected 1 contact, found {len(people)}"
             )
+            continue
+        admin = people[0]
+        want_admin = {
+            "account_id": hits[0],
+            "name": row["administrator"],
+            "title": "Administrator",
+            "phone": row["phone"],
+            "is_active": True,
+        }
+        for f in sorted(set(admin) - IGNORED - {"contact_id"}):
+            want = want_admin.get(f, "")
+            if not _same(admin.get(f), want):
+                out.append(f"{row['slug']} administrator {f}: expected {want!r}, got {admin.get(f)!r}")
     for i in new_ids:
         if i not in created_for.values():
             out.append(f"{_short(i)} unexpected new account: {accounts[i].get('name')!r}")

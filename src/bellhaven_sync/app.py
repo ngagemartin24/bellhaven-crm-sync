@@ -77,7 +77,7 @@ def _lock(db_path: Path) -> None:
 
 
 def _money(v) -> str:
-    return f"${rules.money(v):,}"
+    return rules.dollars(v)
 
 
 def _when(iso: str | None) -> str:
@@ -452,14 +452,16 @@ def create_app(
         return response
 
     @app.post("/cards/{card_id}/approve")
-    def approve_card(request: Request, card_id: str, csrf: str = Form(""), version: str = Form("")):
+    def approve_card(
+        request: Request, card_id: str, csrf: str = Form(""), version: str = Form(""), note: str = Form("")
+    ):
         return act(
             request,
             card_id,
             csrf,
             version,
             "approve",
-            lambda c: apply.approve(c.id, version, ledger, crm_factory()),
+            lambda c: apply.approve(c.id, version, ledger, crm_factory(), note),
         )
 
     @app.post("/cards/{card_id}/reject")
@@ -490,7 +492,9 @@ def create_app(
 
     @app.post("/cards/{card_id}/discard")
     def discard_card(request: Request, card_id: str, csrf: str = Form(""), version: str = Form("")):
-        return act(request, card_id, csrf, version, "discard", lambda c: apply.discard(c.id, ledger))
+        return act(
+            request, card_id, csrf, version, "discard", lambda c: apply.discard(c.id, ledger, crm_factory())
+        )
 
     @app.exception_handler(HTTPException)
     def refused(request: Request, exc: HTTPException):

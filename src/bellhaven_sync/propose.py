@@ -52,7 +52,37 @@ def _sentence(text: str) -> str:
 
 
 def _dollars(v) -> str:
-    return f"${rules.money(v):,}"
+    return rules.dollars(v)
+
+
+ADDRESS = ("billing_street", "billing_city", "billing_state", "billing_zip")
+
+
+def _survivor_still(acc: Account, loc: Location) -> dict:
+    """What a duplicate retirement rests on, for the survivor it does not write: still a live, separate account at
+    the reviewed place (or at the website's, should a details card have synced it first)."""
+    return {
+        "path": f"/accounts/{acc['account_id']}",
+        "label": acc.get("name") or acc["account_id"],
+        "fields": {"duplicate_of_account": acc.get("duplicate_of_account", "")},
+        "one_of": {
+            "billing_street": [acc.get("billing_street", ""), loc.street],
+            "billing_city": [acc.get("billing_city", ""), loc.city],
+            "billing_state": [acc.get("billing_state", ""), loc.state],
+        },
+        "active": True,
+    }
+
+
+def _buyer_still(acc: Account) -> dict:
+    """What a sale rests on: the buyer is still the live account at the old account's address, same care type."""
+    keys = (*ADDRESS, "care_type", "parent_id", "duplicate_of_account", "chow_current_account")
+    return {
+        "path": f"/accounts/{acc['account_id']}",
+        "label": acc.get("name") or acc["account_id"],
+        "fields": {k: acc.get(k, "") for k in keys},
+        "active": True,
+    }
 
 
 def _patch_expect(acc: Account, written, facts=(), with_note: bool = False) -> dict:
@@ -113,6 +143,7 @@ class _Builder:
         steps: list[Step],
         evidence: dict,
         alt_group: str | None = None,
+        needs_complete_read: bool = False,
     ) -> Card:
         card = Card(
             change_set=digest(sorted(c.key for c in changes)),
@@ -127,6 +158,7 @@ class _Builder:
             steps=tuple(steps),
             evidence=evidence,
             alt_group=alt_group,
+            needs_complete_read=needs_complete_read,
         )
         self.cards.append(card)
         return card
@@ -157,8 +189,10 @@ class _Builder:
             )
             rule = f"Not both revenue and AR ({had}): re-parent the existing account directly (billing SOP)."
         return {
-            "lifetime_revenue": rev,
-            "outstanding_ar": ar,
+            "lifetime_revenue": str(rev),
+            "outstanding_ar": str(ar),
+            "has_revenue": rev > 0,
+            "has_ar": ar > 0,
             "needs_chow": rules.needs_chow(acc),
             "rule": rule,
         }
@@ -274,10 +308,7 @@ class _Builder:
         loc = m.location
         start = len(self.cards)
         attention_lows = [
-            c
-            for c in m.lows
-            if self.by_id[c.account_id].get("parent_id") != self.op
-            and rules.needs_chow(self.by_id[c.account_id])
+            c for c in m.lows if rules.look_alike_needs_person(self.by_id[c.account_id], self.op)
         ]
         if m.conflicts:
             self.attention(loc.slug, loc.slug, loc.name, m.conflicts, self.evidence(m, m.group))
@@ -441,6 +472,7 @@ class _Builder:
         changes = self.keep([Change("retire_duplicate", lid, "", survivor, loc.slug) for lid in losers])
         if not changes:
             return
+        still = [_survivor_still(sacc, loc)]
         steps: list[Step] = []
         for ch in changes:
             lacc = self.by_id[ch.record]
@@ -450,9 +482,15 @@ class _Builder:
                     "PATCH",
                     f"/accounts/{ch.record}",
                     {"duplicate_of_account": survivor, "status": "Inactive"},
-                    _patch_expect(
-                        lacc, ("duplicate_of_account", "status"), ("parent_id", "chow_current_account"), True
-                    ),
+                    {
+                        **_patch_expect(
+                            lacc,
+                            ("duplicate_of_account", "status"),
+                            ("parent_id", "chow_current_account"),
+                            True,
+                        ),
+                        "related": still,
+                    },
                     self.note(
                         f"Duplicate of {sacc.get('name')} ({survivor}); marked Inactive",
                         f"same facility as Bellhaven's {loc.name} at {loc.street}, {loc.city}",
@@ -467,7 +505,7 @@ class _Builder:
                         "PATCH",
                         f"/contacts/{c['contact_id']}",
                         {"account_id": survivor},
-                        {"fields": {"account_id": ch.record}},
+                        {"fields": {"account_id": ch.record}, "related": still},
                         None,
                         (ch.key,),
                     )
@@ -698,6 +736,7 @@ class _Builder:
                     kept,
                     [step],
                     ev,
+                    needs_complete_read=True,
                 )
             verdict, reason = "Gone from the website", "no other CRM account at this address"
         elif case == "attention":
@@ -741,7 +780,17 @@ class _Builder:
                 f"/accounts/{bid}",
                 {},
                 _patch_expect(
-                    buyer, (), ("status", "parent_id", "duplicate_of_account", "chow_current_account"), True
+                    buyer,
+                    (),
+                    (
+                        "status",
+                        "parent_id",
+                        "duplicate_of_account",
+                        "chow_current_account",
+                        *ADDRESS,
+                        "care_type",
+                    ),
+                    True,
                 ),
                 self.note(
                     f"Now the current account for {old.get('name')} ({oid})",
@@ -753,22 +802,37 @@ class _Builder:
             ),
         ]
         summary = f"Sold to {buyer.get('parent_name') or 'another owner'}: point the old account at {buyer.get('name')}; old kept for billing ({rev} revenue, {ar} AR)"
-        self.add("chow", old.get("name"), summary, None, [oid, bid], None, [pointer], steps, ev)
+        self.add(
+            "chow",
+            old.get("name"),
+            summary,
+            None,
+            [oid, bid],
+            None,
+            [pointer],
+            steps,
+            ev,
+            needs_complete_read=True,
+        )
 
     def sold_duplicate(self, old: Account, buyer: Account, ev: dict) -> None:
         oid, bid = old["account_id"], buyer["account_id"]
         change = Change("retire_duplicate", oid, "", bid, None)
         if not self.keep([change]):
             return
+        still = [_buyer_still(buyer)]
         steps = [
             Step(
                 1,
                 "PATCH",
                 f"/accounts/{oid}",
                 {"duplicate_of_account": bid, "status": "Inactive"},
-                _patch_expect(
-                    old, ("duplicate_of_account", "status"), ("parent_id", "chow_current_account"), True
-                ),
+                {
+                    **_patch_expect(
+                        old, ("duplicate_of_account", "status"), ("parent_id", "chow_current_account"), True
+                    ),
+                    "related": still,
+                },
                 self.note(
                     f"Duplicate of {buyer.get('name')} ({bid}); marked Inactive",
                     "no longer on Bellhaven's website; the current owner's account is at the same address",
@@ -783,7 +847,7 @@ class _Builder:
                     "PATCH",
                     f"/contacts/{c['contact_id']}",
                     {"account_id": bid},
-                    {"fields": {"account_id": oid}},
+                    {"fields": {"account_id": oid}, "related": still},
                     None,
                     (change.key,),
                 )
@@ -798,6 +862,7 @@ class _Builder:
             [change],
             steps,
             ev,
+            needs_complete_read=True,
         )
 
 

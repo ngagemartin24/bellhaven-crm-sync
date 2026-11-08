@@ -116,9 +116,9 @@ def match_location(
                 f"{_label(by_id[c.account_id])} also partly matches (medium) beside the strong match"
             )
         group, match_band = members, "High"
-    elif len(mediums) == 1:
-        group, match_band = [mediums[0].account_id], "Medium"
-    elif len(mediums) > 1:
+    elif mediums and rules.medium_match([c.account_id for c in mediums]):
+        group, match_band = [rules.medium_match([c.account_id for c in mediums])], "Medium"
+    elif mediums:
         conflicts.append(
             "several accounts partly match (medium) and none strongly: "
             + ", ".join(_label(by_id[c.account_id]) for c in mediums)

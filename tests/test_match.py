@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 import pytest
 from conftest import (
     ACCOUNTS,
@@ -17,7 +19,15 @@ from conftest import (
 )
 
 from bellhaven_sync.match import match_location
-from bellhaven_sync.rules import band, eligible, money, needs_chow, successor_case
+from bellhaven_sync.rules import (
+    band,
+    eligible,
+    look_alike_needs_person,
+    medium_match,
+    money,
+    needs_chow,
+    successor_case,
+)
 
 
 @pytest.mark.parametrize(
@@ -75,6 +85,21 @@ def test_money_and_billing_rule():  # Review Focus 2
     assert (
         not needs_chow(acct("9MB6KL")) and not needs_chow(acct("YCZ4YM")) and not needs_chow(acct("CAE2X4"))
     )
+
+
+def test_fractional_balances_count():  # code review round 5, defect 1
+    lima = acct("9MB6KL")  # $47,000 revenue, $0 AR: a direct move today
+    assert needs_chow(dict(lima, outstanding_ar=0.5)) and needs_chow(dict(lima, outstanding_ar="0.50"))
+    assert not needs_chow(dict(lima, outstanding_ar="0.00"))
+    assert money("1200.50") == Decimal("1200.50") and money(0.1) == Decimal("0.1")
+
+
+def test_ambiguity_rules_live_in_rules():  # SC-7: several mediums, and a look-alike that needs the billing route
+    assert medium_match(["A"]) == "A" and medium_match(["A", "B"]) is None and medium_match([]) is None
+    sandusky = acct("Z2LGDM")  # revenue and AR, under Bellhaven
+    assert look_alike_needs_person(dict(sandusky, parent_id="SOMEONE ELSE"), "OPERATOR")
+    assert not look_alike_needs_person(dict(sandusky, parent_id="OPERATOR"), "OPERATOR")
+    assert not look_alike_needs_person(dict(acct("9MB6KL"), parent_id="SOMEONE ELSE"), "OPERATOR")
 
 
 def test_band_rules_live_in_rules():  # SC-7, F1

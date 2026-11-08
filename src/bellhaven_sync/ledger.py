@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS decisions (
 CREATE TABLE IF NOT EXISTS cards (
   id TEXT PRIMARY KEY, change_set TEXT, kind TEXT, section TEXT, title TEXT, summary TEXT, location_slug TEXT,
   account_ids TEXT, band TEXT, changes TEXT, evidence TEXT, steps TEXT, status TEXT, alt_group TEXT, flag TEXT,
-  built_run INTEGER, created_at TEXT, refreshed_at TEXT);
+  built_run INTEGER, created_at TEXT, refreshed_at TEXT, needs_complete_read INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS operations (
   id INTEGER PRIMARY KEY, card_id TEXT, status TEXT, started_at TEXT, finished_at TEXT, message TEXT);
 CREATE TABLE IF NOT EXISTS steps (
@@ -180,8 +180,8 @@ class Ledger:
         stamp = now_iso()
         db.execute(
             "INSERT INTO cards(id, change_set, kind, section, title, summary, location_slug, account_ids, band, "
-            "changes, evidence, steps, status, alt_group, flag, built_run, created_at, refreshed_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?)",
+            "changes, evidence, steps, status, alt_group, flag, built_run, created_at, refreshed_at, "
+            "needs_complete_read) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?,?,?)",
             (
                 card_id,
                 card.change_set,
@@ -200,6 +200,7 @@ class Ledger:
                 run_id,
                 stamp,
                 stamp,
+                int(card.needs_complete_read),
             ),
         )
         for c in card.changes:
@@ -229,20 +230,32 @@ class Ledger:
         return card_id
 
     def record_cards(self, run_id: int, cards: list[Card], complete: bool) -> dict[str, int]:
-        """10.3 steps 3-5: keep a pending card whose change set is unchanged; new card otherwise."""
-        counts = {"new": 0, "refreshed": 0, "superseded": 0, "blocked": 0, "unblocked": 0}
+        """10.3 steps 3-5: keep a pending card whose change set is unchanged; new card otherwise.
+
+        The run built its cards from decisions and reservations read earlier. Inside this write transaction they
+        are read again, so a change decided or claimed while the run was working is never recorded as new."""
+        counts = {"new": 0, "refreshed": 0, "superseded": 0, "blocked": 0, "unblocked": 0, "skipped": 0}
         with self.tx() as db:
             open_cards = {
                 r["change_set"]: r
                 for r in db.execute(
-                    "SELECT id, change_set, status, steps, evidence, summary FROM cards "
+                    "SELECT id, change_set, status, steps, evidence, summary, built_run FROM cards "
                     "WHERE status IN ('pending','blocked')"
                 )
             }
+            decided = {r[0] for r in db.execute("SELECT DISTINCT change_key FROM decisions")}
+            accounts, locations = self._live_reservations(db)
             seen: set[str] = set()
             for card in cards:
                 seen.add(card.change_set)
                 row = open_cards.get(card.change_set)
+                if row is None and (
+                    card.change_keys & decided
+                    or _touched_accounts(card) & accounts
+                    or (card.location_slug and card.location_slug in locations)
+                ):
+                    counts["skipped"] += 1
+                    continue
                 if row is None:
                     self._insert_card(db, run_id, card)
                     counts["new"] += 1
@@ -271,14 +284,17 @@ class Ledger:
                     counts["unblocked"] += 1
             if complete:
                 for change_set, row in open_cards.items():
-                    if change_set not in seen:
+                    # a card the ledger raised itself (none of these) stays until a person acknowledges it
+                    if change_set not in seen and row["built_run"] is not None:
                         db.execute(
                             "UPDATE cards SET status='superseded' WHERE id=? AND status=?",
                             (row["id"], row["status"]),
                         )
                         counts["superseded"] += 1
             else:
-                cur = db.execute("UPDATE cards SET status='blocked' WHERE kind='gone' AND status='pending'")
+                cur = db.execute(
+                    "UPDATE cards SET status='blocked' WHERE needs_complete_read=1 AND status='pending'"
+                )
                 counts["blocked"] += cur.rowcount
         return counts
 
@@ -305,6 +321,7 @@ class Ledger:
             steps=steps,
             evidence=json.loads(r["evidence"]),
             alt_group=r["alt_group"],
+            needs_complete_read=bool(r["needs_complete_read"]),
             id=r["id"],
             status=r["status"],
             version=digest([r["change_set"], r["refreshed_at"]]),
@@ -433,20 +450,52 @@ class Ledger:
         )
         self._insert_card(db, None, card)
 
-    def claim(self, card_id: str, version: str) -> int | None:
+    def _live_reservations(self, db) -> tuple[set[str], set[str]]:
+        rows = db.execute(
+            "SELECT r.account_id, r.location_slug FROM reservations r JOIN operations o ON o.id=r.op_id "
+            f"WHERE o.status IN {LIVE_OPS}"
+        ).fetchall()
+        return {r[0] for r in rows if r[0]}, {r[1] for r in rows if r[1]}
+
+    def _conflict(self, db, r) -> str | None:
+        keys = [Change(*c).key for c in json.loads(r["changes"])]
+        if (
+            keys
+            and db.execute(
+                f"SELECT 1 FROM decisions WHERE change_key IN ({','.join('?' * len(keys))}) LIMIT 1", keys
+            ).fetchone()
+        ):
+            return "Already decided"
+        accounts, locations = self._live_reservations(db)
+        busy = sorted(_row_accounts(r) & accounts)
+        if busy:
+            return f"Another change to {busy[0]} is unfinished; finish or discard it first"
+        if r["location_slug"] and r["location_slug"] in locations and not r["alt_group"]:
+            return "Another change for this location is unfinished; finish or discard it first"
+        return None
+
+    def claim_conflict(self, card_id: str) -> str | None:
+        """Why a claim would be refused now: its change already decided, or a record it writes held by an
+        unfinished operation (10.5)."""
+        with self.tx() as db:
+            r = db.execute("SELECT * FROM cards WHERE id=?", (card_id,)).fetchone()
+            return self._conflict(db, r) if r else "Not available now"
+
+    def claim(self, card_id: str, version: str, note: str = "") -> int | None:
         """11 step 1: card pending -> applying, a new operation, its reservations and its group, in one go."""
         try:
-            return self._claim(card_id, version)
+            return self._claim(card_id, version, note)
         except _Abort:
             return None
 
-    def _claim(self, card_id: str, version: str) -> int | None:
+    def _claim(self, card_id: str, version: str, note: str) -> int | None:
         with self.tx() as db:
             r = db.execute("SELECT * FROM cards WHERE id=?", (card_id,)).fetchone()
             if (
                 r is None
                 or r["status"] != "pending"
                 or digest([r["change_set"], r["refreshed_at"]]) != version
+                or self._conflict(db, r)
             ):
                 return None
             if (
@@ -467,15 +516,11 @@ class Ledger:
                 ).rowcount
                 if taken != 1:
                     raise _Abort()
-            accounts = set(json.loads(r["account_ids"]))
-            for s in json.loads(r["steps"]):
-                if s["path"].startswith("/accounts/"):
-                    accounts.add(s["path"].rsplit("/", 1)[1])
-            for a in sorted(accounts):
+            for a in sorted(_row_accounts(r)):
                 db.execute("INSERT INTO reservations VALUES (?,?,NULL)", (op_id, a))
             if r["location_slug"]:
                 db.execute("INSERT INTO reservations VALUES (?,NULL,?)", (op_id, r["location_slug"]))
-            self._decide(db, card_id, "approved", "")
+            self._decide(db, card_id, "approved", note)
             return op_id
 
     # ---- operations and steps -------------------------------------------------------------------------------
@@ -679,6 +724,18 @@ class Ledger:
                 }
             )
         return out
+
+
+def _touched_accounts(card: Card) -> set[str]:
+    out = set(card.account_ids)
+    out |= {s.path.rsplit("/", 1)[1] for s in card.steps if s.path.startswith("/accounts/")}
+    return out
+
+
+def _row_accounts(r) -> set[str]:
+    out = set(json.loads(r["account_ids"]))
+    out |= {s["path"].rsplit("/", 1)[1] for s in json.loads(r["steps"]) if s["path"].startswith("/accounts/")}
+    return out
 
 
 class _Abort(Exception):

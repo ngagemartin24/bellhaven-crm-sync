@@ -333,7 +333,7 @@ class AppEnv:
 
         if status == "failed":
             c = self.pending("details", account="NRLNME")
-            self.fake.fail_next("PATCH", 500, "boom")
+            self.fake.fail_next("PATCH", 422, "boom")  # a definite refusal: nothing written
         else:
             c = self.pending("new_account", slug="bellhaven-of-batavia")
             self.fake.drop_next_write("POST")

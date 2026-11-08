@@ -67,3 +67,12 @@ def test_missing_and_leftover_disagreements(tmp_path):
     subjects = sorted(r["subject"] for r in compare(answers, l))
     assert subjects == [full_id("7DTQP7"), "bellhaven-of-goshen"]
     assert only(l.cards("pending"), kind="gone", account="7DTQP7").flag
+
+
+def test_a_copy_listed_again_as_a_leftover_duplicate_agrees(tmp_path):  # blind check 1: Owosso's copy
+    l = ran(tmp_path)
+    answers = expected_answers()
+    answers["leftovers"][full_id("15UA71")] = {"outcome": "duplicate", "target": full_id("2ZTRE6")}
+    assert compare(answers, l) == []
+    answers["leftovers"][full_id("15UA71")] = {"outcome": "duplicate", "target": full_id("J8DYYV")}
+    assert [r["subject"] for r in compare(answers, l)] == [full_id("15UA71")]

@@ -22,7 +22,7 @@ from bellhaven_sync.pipeline import run_once
 def test_failure_then_retry_no_second_create(tmp_path):
     l, crm = ready(tmp_path)
     c = chow_card(l, "bellhaven-of-tiffin")
-    crm.fail_next("POST", 500, "boom", after=1)  # step 1 succeeds, step 2 fails
+    crm.fail_next("POST", 422, "rejected", after=1)  # step 1 succeeds, step 2 is refused (definite)
     r = approve(c.id, c.version, l, crm)
     assert r.status == "failed" and r.message.startswith("Failed at step 2 of 3")
     assert retry(c.id, l, crm).status == "done"
@@ -39,7 +39,7 @@ def test_lost_post_reconciles_without_reposting(tmp_path):
     c = new_card(l, "bellhaven-of-batavia")
     crm.lose_next_response("POST")
     assert approve(c.id, c.version, l, crm).status == "needs-reconciliation"
-    assert discard(c.id, l).status == "refused"  # too soon: it may have landed
+    assert discard(c.id, l, crm).status == "refused"  # too soon: it may have landed
     assert check_again(c.id, l, crm).status == "done"
     assert sum(1 for (m, p, _) in crm.writes if m == "POST" and p == "/accounts") == 1
 
@@ -51,7 +51,7 @@ def test_changed_phone_stops_before_writing(tmp_path):  # round 2, N1
     r = approve(c.id, c.version, l, crm)
     assert r.status == "failed" and "phone is now (330) 555-0123, not (517) 409-8156" in r.message
     assert crm.writes == []
-    assert discard(c.id, l).status == "done" and run_once(FETCH, crm, l, PARENT, DAY).counts["new"] >= 1
+    assert discard(c.id, l, crm).status == "done" and run_once(FETCH, crm, l, PARENT, DAY).counts["new"] >= 1
 
 
 def test_new_ar_stops_reparent(tmp_path):
@@ -74,7 +74,7 @@ def test_half_done_chow_reserves_both_accounts(tmp_path):
     c = chow_card(l, "bellhaven-of-tiffin")
     crm.fail_next("PATCH", 500, "boom")  # steps 1-2 (POSTs) succeed, step 3 fails
     assert approve(c.id, c.version, l, crm).status == "failed"
-    assert discard(c.id, l).status == "refused"
+    assert discard(c.id, l, crm).status == "refused"
     run_once(FETCH, crm, l, PARENT, DAY)
     assert not [
         x
@@ -107,9 +107,9 @@ def test_uncertain_discard_waits_ten_minutes(tmp_path):  # 11 step 5
     t0 = utcnow()
     assert approve(c.id, c.version, l, crm).status == "needs-reconciliation"
     assert check_again(c.id, l, crm, now=lambda: t0 + timedelta(minutes=5)).message == "Not found yet"
-    assert discard(c.id, l, now=lambda: t0 + timedelta(minutes=5)).status == "refused"
+    assert discard(c.id, l, crm, now=lambda: t0 + timedelta(minutes=5)).status == "refused"
     check_again(c.id, l, crm, now=lambda: t0 + timedelta(minutes=11))
-    assert discard(c.id, l, now=lambda: t0 + timedelta(minutes=11)).status == "done"
+    assert discard(c.id, l, crm, now=lambda: t0 + timedelta(minutes=11)).status == "done"
 
 
 def test_discard_refused_after_account_landed(tmp_path):  # round 4, R4-1
@@ -119,7 +119,7 @@ def test_discard_refused_after_account_landed(tmp_path):  # round 4, R4-1
     t0 = utcnow()
     assert approve(c.id, c.version, l, crm).status == "needs-reconciliation"
     check_again(c.id, l, crm, now=lambda: t0 + timedelta(minutes=11))
-    assert discard(c.id, l, now=lambda: t0 + timedelta(minutes=11)).status == "refused"
+    assert discard(c.id, l, crm, now=lambda: t0 + timedelta(minutes=11)).status == "refused"
 
 
 def test_rejected_write_shape_stops_cleanly(tmp_path):  # Review Focus 1
