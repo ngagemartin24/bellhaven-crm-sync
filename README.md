@@ -74,5 +74,7 @@ move), re-runs, incomplete website reads, retries and uncertain creates.
 - [docs/PLAN.md](docs/PLAN.md): how it was built, task by task.
 - [docs/TESTING.md](docs/TESTING.md): every test and audit (accessibility, Lighthouse, security, code review), what
   each found and what was fixed, plus seven recorded walkthroughs of the app.
+- [docs/demo.mp4](docs/demo.mp4): the two-minute demo on the real CRM (approve, reject, the change in the CRM
+  browser), captioned.
 - [WRITEUP.md](WRITEUP.md): the matching approach, the judgment calls, how AI tools were used, and what
   comes next.
