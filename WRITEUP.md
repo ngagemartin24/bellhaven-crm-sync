@@ -80,7 +80,7 @@ waits whenever the latest website read was incomplete.
 
 I set the requirements and made every judgment call above in a structured interview with Claude Code, which
 then wrote the design, the plan, the code and the tests to that spec. A second model, GPT-6 Astra, reviewed
-the design four times and the code twice, independently. The reviews found real problems, mostly in the write
+the design four times and the code four times, independently, until a review passed with no findings. The reviews found real problems, mostly in the write
 path: retries, lost answers, a run racing a reviewer. Each one got a failing test before its fix. For the
 answers themselves, a fresh Astra session that never saw my design classified every location from the same
 website and CRM data. It reached the same result for every location and leftover account except Kettering's survivor, where the
