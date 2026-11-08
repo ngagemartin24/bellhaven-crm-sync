@@ -26,6 +26,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from . import apply, rules
 from .config import Config
 from .ledger import Ledger
+from .normalize import map_care, same_person
 
 ROOT = Path(__file__).resolve().parents[2]
 OPEN_STATUSES = ("failed", "needs-reconciliation", "applying", "pending", "blocked")
@@ -231,12 +232,12 @@ class View:
         if not site and not crm:
             return None
 
-        def row(label, site_value, crm_values):
+        def row(label, site_value, crm_values, same=lambda v, w: _norm(v) == _norm(w)):
             return {
                 "label": label,
                 "site": _show(site_value) if site else None,
                 "crm": [
-                    {"value": _show(v), "differs": bool(site) and _norm(v) != _norm(site_value)}
+                    {"value": _show(v), "differs": (not same(v, site_value)) if site and site_value else None}
                     for v in crm_values
                 ],
             }
@@ -250,7 +251,12 @@ class View:
                 [f"{a.get('billing_city')}, {a.get('billing_state')} {a.get('billing_zip')}" for a in crm],
             ),
             row("Phone", site and site["phone"], [a.get("phone") for a in crm]),
-            row("Care", site and ", ".join(site.get("offerings") or []), [a.get("care_type") for a in crm]),
+            row(
+                "Care",
+                site and ", ".join(site.get("offerings") or []),
+                [a.get("care_type") for a in crm],
+                same=lambda v, _w: (v or "") in {map_care(o) for o in site.get("offerings") or []},
+            ),
             row(
                 "Administrator",
                 site and site.get("administrator"),
@@ -261,9 +267,12 @@ class View:
                 ],
             ),
         ]
-        for r in rows[4:]:
-            for c in r["crm"]:
-                c["differs"] = False  # care labels and contact lists are compared in the signals, not here
+        # the administrator matches when one of the account's contacts is the same person as the website's
+        if site and site.get("administrator"):
+            for a, cell in zip(crm, rows[5]["crm"], strict=True):
+                cell["differs"] = not any(
+                    same_person(c["name"], site["administrator"]) for c in a.get("contacts", [])
+                )
         owners = [
             {
                 "parent": a.get("parent_name") or "No parent",

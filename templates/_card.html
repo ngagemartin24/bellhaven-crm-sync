@@ -67,7 +67,7 @@
       <thead><tr><th scope="col"></th>{% if cmp.site %}<th scope="col">Website</th>{% endif %}{% for a in cmp.crm %}<th scope="col">CRM {{ a.account_id[-6:] }}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for r in cmp.rows %}
-        <tr><th scope="row">{{ r.label }}</th>{% if cmp.site %}<td>{{ r.site }}</td>{% endif %}{% for v in r.crm %}<td class="{% if v.differs %}differs{% else %}same{% endif %}">{{ v.value }}{% if cmp.site %} <span class="visually-hidden">({% if v.differs %}differs from{% else %}matches{% endif %} the website)</span>{% endif %}</td>{% endfor %}</tr>
+        <tr><th scope="row">{{ r.label }}</th>{% if cmp.site %}<td>{{ r.site }}</td>{% endif %}{% for v in r.crm %}<td{% if v.differs is not none %} class="{% if v.differs %}differs{% else %}same{% endif %}"{% endif %}>{{ v.value }}{% if v.differs is not none %} <span class="visually-hidden">({% if v.differs %}differs from{% else %}matches{% endif %} the website)</span>{% endif %}</td>{% endfor %}</tr>
       {% endfor %}
         <tr><th scope="row">Parent</th>{% if cmp.site %}<td>—</td>{% endif %}{% for o in cmp.owners %}<td>{{ o.parent }}</td>{% endfor %}</tr>
         <tr><th scope="row">Status · billing</th>{% if cmp.site %}<td>—</td>{% endif %}{% for o in cmp.owners %}<td>{{ o.status }} · <span class="num">{{ o.money }}</span></td>{% endfor %}</tr>

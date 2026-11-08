@@ -55,6 +55,23 @@ def test_retired_survivor_stops_the_duplicate_retirement(tmp_path):
     assert crm.get_contact(contact_id("Tricia Lindqvist"))["account_id"] == full_id("15UA71")
 
 
+def test_survivor_retired_between_steps_stops_the_contact_move(tmp_path):
+    l, crm = ready(tmp_path)
+    c = dup_card(l, "bellhaven-of-owosso")  # step 1 retires 15UA71, step 2 moves Tricia to 2ZTRE6
+    real_patch = crm.patch_account
+
+    def patch_then_retire_survivor(account_id, body):
+        result = real_patch(account_id, body)
+        if account_id == full_id("15UA71"):
+            crm.patch_account_raw(full_id("2ZTRE6"), {"status": "Inactive"})
+        return result
+
+    crm.patch_account = patch_then_retire_survivor
+    r = approve(c.id, c.version, l, crm)
+    assert r.status == "failed" and "Inactive" in r.message
+    assert crm.get_contact(contact_id("Tricia Lindqvist"))["account_id"] == full_id("15UA71")
+
+
 def test_sold_survivor_stops_the_duplicate_retirement(tmp_path):
     l, crm = ready(tmp_path)
     c = dup_card(l, "bellhaven-of-owosso")

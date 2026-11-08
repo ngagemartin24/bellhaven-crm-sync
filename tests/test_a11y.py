@@ -42,6 +42,22 @@ def test_side_by_side_table_scrolls_by_keyboard_and_says_what_differs(env):  # A
     assert '<span class="visually-hidden">(differs from the website)</span>' in html
 
 
+def _row(html, label):
+    return re.search(r'<th scope="row">' + label + r"</th>(.*?)</tr>", html, re.DOTALL).group(1)
+
+
+def test_administrator_row_says_when_the_crm_names_someone_else(env):
+    c = env.pending("wrong_parent", account="9MB6KL")  # Lima: the website names Tricia Fitch
+    row = _row(env.client.get(f"/?card={c.id}").text, "Administrator")
+    assert "Nadia Sandoval" in row and "(differs from the website)" in row and "(matches" not in row
+
+
+def test_care_row_compares_the_care_type(env):
+    c = env.pending("wrong_parent", account="9MB6KL")
+    row = _row(env.client.get(f"/?card={c.id}").text, "Care")
+    assert "(matches the website)" in row and "(differs" not in row
+
+
 @pytest.mark.parametrize("path", ["/locations"])
 def test_table_cells_carry_their_column_label(env, path):  # A11Y-005
     html = env.client.get(path).text

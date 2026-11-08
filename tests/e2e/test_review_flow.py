@@ -79,7 +79,10 @@ def test_approve_reject_rerun(page, live_app):
 
     # on a desktop window the queue fills the window exactly: the panes scroll, the page never does
     # (2026-11-08: screen-reader-only labels positioned against the page stretched it 500px)
-    for card in (tiffin, only(live_app.ledger.cards("pending"), kind="duplicates", slug="bellhaven-of-kettering")):
+    for card in (
+        tiffin,
+        only(live_app.ledger.cards("pending"), kind="duplicates", slug="bellhaven-of-kettering"),
+    ):
         page.goto(f"{live_app.url}/?card={card.id}#card-{card.id}")
         size = page.evaluate("() => [document.scrollingElement.scrollHeight, innerHeight, scrollY]")
         assert size[0] == size[1] and size[2] == 0, f"page taller than the window: {size}"

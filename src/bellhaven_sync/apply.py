@@ -220,6 +220,10 @@ def _run(op_id: int, ledger: Ledger, crm) -> ApplyResult:
                     raise _Stop(problem)
         for s in todo:
             current = s
+            # the related records may have changed during the earlier steps of this approval
+            problem = _related_problem(s, crm, m)
+            if problem:
+                raise _Stop(problem)
             if s.method == "PATCH":
                 _patch(s, op_id, ledger, crm, created, m)
             else:
