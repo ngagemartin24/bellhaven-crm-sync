@@ -5,6 +5,7 @@ only one app process may run against a decisions file (10.4).
 """
 
 import fcntl
+import hashlib
 import hmac
 import json
 import secrets
@@ -16,6 +17,7 @@ from typing import Any
 from urllib.parse import quote, unquote, urlencode, urlsplit
 
 from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -321,7 +323,12 @@ def create_app(
     recovered = ledger.recover_interrupted()
     app = FastAPI(title="Bellhaven CRM sync", docs_url=None, redoc_url=None, openapi_url=None)
     app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
+    app.add_middleware(GZipMiddleware, minimum_size=500)
     templates = Jinja2Templates(directory=ROOT / "templates")
+    # the stylesheet link carries its content hash, so static files can be cached for a year without going stale
+    templates.env.globals["css_version"] = hashlib.sha256(
+        (ROOT / "static" / "app.css").read_bytes()
+    ).hexdigest()[:8]
     templates.env.filters["fromjson"] = lambda v: json.loads(v) if v else {}
     form_secret = secrets.token_bytes(32)  # per process: a restart expires open forms
 
@@ -352,6 +359,8 @@ def create_app(
         response.headers.update(SECURITY_HEADERS)
         if response.headers.get("content-type", "").startswith("text/html"):
             response.headers["Cache-Control"] = "no-store"
+        elif request.url.path.startswith("/static/") and response.status_code == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
 
     def page(request: Request, name: str, **ctx) -> HTMLResponse:

@@ -73,3 +73,26 @@ def test_phone_layout_rules(env):  # A11Y-001/002/003/005/006/007/008/010/011
     assert ".table thead { position: absolute;" in phone and ".table thead { display: none; }" not in phone
     assert ".table td[data-label]::before { content: attr(data-label);" in phone
     assert "@media (max-width: 640px), (max-height: 700px) {\n  .actions { position: static;" in css
+
+
+# Lighthouse best-practices and SEO deductions, 2026-11-08 (testing/out/lighthouse)
+def test_pages_are_compressed(env):
+    r = env.client.get("/locations", headers={"Accept-Encoding": "gzip"})
+    assert r.headers.get("content-encoding") == "gzip"
+
+
+def test_static_files_cache_for_a_year_behind_a_versioned_link(env):
+    html = env.client.get("/").text
+    m = re.search(r'href="/static/app\.css\?v=([0-9a-f]{8})"', html)
+    assert m, "the stylesheet link carries a content version"
+    for path in ("/static/app.css?v=" + m.group(1), "/static/fonts/Geist-Variable.woff2"):
+        assert "max-age=31536000" in env.client.get(path).headers["cache-control"]
+    assert env.client.get("/").headers["cache-control"] == "no-store"
+
+
+def test_pages_describe_themselves_and_stay_out_of_search(env):
+    for path in ("/", "/no-such-page"):
+        html = env.client.get(path).text
+        assert (
+            '<meta name="description" content="' in html and '<meta name="robots" content="noindex">' in html
+        )
