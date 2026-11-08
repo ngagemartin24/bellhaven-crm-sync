@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% block title %}{% if selected %}{{ selected.title }} · {% endif %}Review queue{% endblock %}
 {% block sub %}{% if run %}Run {{ when(run.finished_at) }} · {% if run.complete %}complete{% else %}incomplete{% endif %} · {{ run.found }} of {{ run.stated if run.stated is not none else '?' }} locations on the website · {{ run.accounts_read }} CRM accounts read · {{ open_count }} proposals{% else %}No run yet. Run <code>bellhaven-sync run</code> to read the website and the CRM.{% endif %}{% endblock %}
 {% block content %}
 {% if not shown %}
@@ -20,7 +21,7 @@
       <ul>
       {% for c in section.cards %}
         <li id="card-{{ c.id }}">
-          <a class="row {% if selected and c.id == selected.id %}selected{% endif %}" href="/?card={{ c.id }}{% if location %}&location={{ location }}{% endif %}#card-{{ c.id }}" {% if selected and c.id == selected.id %}aria-current="true"{% endif %}>
+          <a class="row {% if selected and c.id == selected.id %}selected{% endif %}" title="{{ c.title }}: {{ c.summary }}" href="/?card={{ c.id }}{% if location %}&location={{ location }}{% endif %}#card-{{ c.id }}" {% if selected and c.id == selected.id %}aria-current="true"{% endif %}>
             <span class="line1"><span class="who">{{ c.title }}</span>
               {% if c.status in ('failed', 'needs-reconciliation', 'applying') %}<span class="pill bad">{{ status_words[c.status] }}</span>
               {% elif c.status == 'blocked' %}<span class="pill warn">Held</span>

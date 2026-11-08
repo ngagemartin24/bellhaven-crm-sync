@@ -8,7 +8,7 @@
 
 :root {
   --ground: #f8f8f8; --surface: #ffffff; --raised: #eeeeee; --active: #eeeeee;
-  --border: #e6e6e6; --rule: #f0f0f0; --control: #d4d4d4;
+  --border: #e6e6e6; --rule: #f0f0f0; --control: #8a8a8a;
   --text: #0a0a0a; --muted: #6b6b6b;
   --primary: #141414; --secondary: #e5e5e5;
   --hue: #1d5fbf; --hue-wash: #d9e5f7;
@@ -39,6 +39,10 @@ code, pre, .id { font-family: var(--mono); font-size: 13px; }
 .muted { color: var(--muted); }
 .small { font-size: var(--fs-small); line-height: 16px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.skip { position: absolute; left: 8px; top: -48px; z-index: 10; padding: 8px 12px; border-radius: var(--radius-control);
+  background: var(--primary); color: var(--on-primary); }
+.skip:focus { top: 8px; color: var(--on-primary); }
+#proposal:focus { outline: none; }
 
 /* shell: an icon rail on the page ground */
 .shell { display: grid; grid-template-columns: 56px minmax(0, 1fr); min-height: 100vh; }
@@ -74,6 +78,7 @@ h1 { margin: 0; font-size: var(--fs-title); line-height: 32px; font-weight: 600;
 /* the two panes */
 .workspace { display: grid; grid-template-columns: 360px minmax(0, 1fr); gap: var(--gap); align-items: start; }
 .list { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow: auto; }
+.list { scroll-padding-top: 64px; }
 .toolbar { display: flex; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid var(--rule); position: sticky; top: 0;
   background: var(--surface); z-index: 1; }
 .toolbar select { flex: 1; min-width: 0; height: 32px; border: 1px solid var(--control); border-radius: var(--radius-control);
@@ -103,7 +108,7 @@ h1 { margin: 0; font-size: var(--fs-title); line-height: 32px; font-weight: 600;
 /* the open proposal */
 .item { padding: var(--card-pad) var(--pad) 0; min-width: 0; }
 .item-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
-.tags { display: flex; gap: 10px; align-items: center; margin: 6px 0 0; color: var(--muted); font-size: var(--fs-small); }
+.tags { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0 0; color: var(--muted); font-size: var(--fs-small); }
 .item h2 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; }
 .summary { margin: 8px 0 0; }
 .links { margin: 4px 0 0; flex: none; text-align: right; font-size: 13px; max-width: 40%; }
@@ -132,6 +137,8 @@ p.note span { color: var(--hue); }
 .changes .note span { color: var(--hue); }
 .compare td.same { color: var(--muted); }
 .compare td.differs { color: var(--text); font-weight: 500; }
+.scroller { overflow-x: auto; }
+.scroller:focus-visible { outline-offset: 4px; }
 
 /* the billing rule: two figures and the route they force */
 .ledger { display: grid; grid-template-columns: 1fr 1fr 2fr; border: 1px solid var(--border); border-radius: var(--radius-card); }
@@ -191,6 +198,7 @@ button:active { transform: translateY(1px); }
 .v-match-needs-a-fix, .v-new, .v-possible-match-only, .v-gone-from-the-website, .v-sold, .v-needs-attention { color: var(--text); }
 .v-confident-match, .v-medium-match-nothing-to-change { color: var(--muted); }
 td .line2 { white-space: normal; }
+.table .who { white-space: normal; overflow-wrap: anywhere; }
 
 /* history */
 .history { padding: 4px 0; }
@@ -199,6 +207,11 @@ td .line2 { white-space: normal; }
 .entry summary { display: grid; grid-template-columns: minmax(0, 2fr) auto minmax(0, 2fr) auto; gap: 12px; align-items: center;
   min-height: 48px; cursor: pointer; }
 .entry summary .when { color: var(--muted); }
+.entry summary { list-style: none; position: relative; padding-left: 18px; }
+.entry summary::-webkit-details-marker { display: none; }
+.entry summary::after { content: ""; position: absolute; left: 2px; top: 50%; width: 6px; height: 6px; margin-top: -4px;
+  border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(-45deg); }
+.entry[open] > summary::after { transform: rotate(45deg); }
 .entry[open] { padding-bottom: 14px; }
 .steps { margin-top: 8px; }
 .kv { display: block; }
@@ -213,6 +226,11 @@ td .line2 { white-space: normal; }
   .workspace > .item { height: 100%; overflow: auto; }
 }
 
+/* small or short windows: the decision bar stays at the end of the card so it never covers the evidence */
+@media (max-width: 640px), (max-height: 700px) {
+  .actions { position: static; border-radius: 0 0 var(--radius-card) var(--radius-card); }
+}
+
 /* tablet and phone: the rail becomes a bottom bar; the panes stack */
 @media (max-width: 960px) {
   .workspace { grid-template-columns: minmax(0, 1fr); }
@@ -220,6 +238,7 @@ td .line2 { white-space: normal; }
   .counts { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
+  html { scroll-padding-bottom: 72px; }
   .shell { grid-template-columns: minmax(0, 1fr); padding-bottom: 64px; }
   .rail { position: fixed; top: auto; bottom: 0; left: 0; right: 0; height: 60px; flex-direction: row; justify-content: space-around;
     padding: 6px 8px; border-right: 0; border-top: 1px solid var(--border); background: var(--ground); z-index: 5; }
@@ -235,10 +254,11 @@ td .line2 { white-space: normal; }
   .ledger .route { grid-column: 1 / -1; border-left: 0 !important; border-top: 1px solid var(--border); }
   .signals ul { grid-template-columns: minmax(0, 1fr); }
   .created { grid-template-columns: minmax(0, 1fr); }
-  .compare, .changes { display: block; overflow-x: auto; }
+  .changes { display: block; overflow-x: auto; }
   .counts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .entry summary { grid-template-columns: minmax(0, 1fr) auto; }
-  .table thead { display: none; }
+  .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .table td[data-label]::before { content: attr(data-label); display: block; color: var(--muted); font-size: var(--fs-small); line-height: 16px; }
   .table tr { display: block; padding: 10px 0; border-top: 1px solid var(--rule); }
   .table tr:first-child { border-top: 0; }
   .table td { display: block; border: 0; padding: 2px 16px; }

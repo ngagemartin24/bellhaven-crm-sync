@@ -1,7 +1,7 @@
 {% set c = selected %}
 {% set cmp = view.comparison(c) %}
 {% set ev = c.evidence %}
-<article class="item panel" aria-labelledby="item-title">
+<article class="item panel" id="proposal" tabindex="-1" aria-labelledby="item-title">
   <header class="item-head">
     <div class="item-title">
       <h2 id="item-title">{{ c.title }}</h2>
@@ -62,16 +62,18 @@
   {% if cmp %}
   <section class="block" aria-labelledby="cmp-{{ c.id }}">
     <h3 id="cmp-{{ c.id }}">Website and CRM side by side</h3>
+    <div class="scroller" role="region" aria-label="Website and CRM side by side, scrolls sideways" tabindex="0">
     <table class="compare">
       <thead><tr><th scope="col"></th>{% if cmp.site %}<th scope="col">Website</th>{% endif %}{% for a in cmp.crm %}<th scope="col">CRM {{ a.account_id[-6:] }}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for r in cmp.rows %}
-        <tr><th scope="row">{{ r.label }}</th>{% if cmp.site %}<td>{{ r.site }}</td>{% endif %}{% for v in r.crm %}<td class="{% if v.differs %}differs{% else %}same{% endif %}">{{ v.value }}</td>{% endfor %}</tr>
+        <tr><th scope="row">{{ r.label }}</th>{% if cmp.site %}<td>{{ r.site }}</td>{% endif %}{% for v in r.crm %}<td class="{% if v.differs %}differs{% else %}same{% endif %}">{{ v.value }}{% if cmp.site %} <span class="visually-hidden">({% if v.differs %}differs from{% else %}matches{% endif %} the website)</span>{% endif %}</td>{% endfor %}</tr>
       {% endfor %}
         <tr><th scope="row">Parent</th>{% if cmp.site %}<td>—</td>{% endif %}{% for o in cmp.owners %}<td>{{ o.parent }}</td>{% endfor %}</tr>
         <tr><th scope="row">Status · billing</th>{% if cmp.site %}<td>—</td>{% endif %}{% for o in cmp.owners %}<td>{{ o.status }} · <span class="num">{{ o.money }}</span></td>{% endfor %}</tr>
       </tbody>
     </table>
+    </div>
     <p class="muted small">Values that differ from the website are in full ink; matching values are grey.</p>
   </section>
   {% endif %}

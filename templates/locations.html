@@ -15,10 +15,10 @@
     <tbody>
     {% for r in rows %}{% set v = r.v %}
       <tr>
-        <td><span class="who">{{ v.name }}</span><span class="line2">{{ v.reason }}</span></td>
-        <td><span class="verdict v-{{ v.verdict|lower|replace(' ', '-')|replace(',', '') }}">{{ v.verdict }}</span>{% if v.band %}<span class="line2">{{ v.band }} confidence</span>{% endif %}</td>
-        <td>{% for a, link in r.links %}<span class="id">{{ a[-6:] }}</span>{% if link %} <a href="{{ link }}" rel="noreferrer">View in CRM</a>{% endif %}{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</td>
-        <td>{% for f in r.fixes %}<a href="/?card={{ f.id }}#card-{{ f.id }}">{{ f.section }}</a> <span class="muted">{{ status_words[f.status] }}</span>{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</td>
+        <td data-label="Location or account"><span class="who">{{ v.name }}</span><span class="line2">{{ v.reason }}</span></td>
+        <td data-label="Verdict"><span class="verdict v-{{ v.verdict|lower|replace(' ', '-')|replace(',', '') }}">{{ v.verdict }}</span>{% if v.band %}<span class="line2">{{ v.band }} confidence</span>{% endif %}</td>
+        <td data-label="Linked CRM account">{% for a, link in r.links %}<span class="id">{{ a[-6:] }}</span>{% if link %} <a href="{{ link }}" rel="noreferrer">View in CRM</a>{% endif %}{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</td>
+        <td data-label="Proposals">{% for f in r.fixes %}<a href="/?card={{ f.id }}#card-{{ f.id }}">{{ f.section }}</a> <span class="muted">{{ status_words[f.status] }}</span>{% if not loop.last %}<br>{% endif %}{% else %}<span class="muted">—</span>{% endfor %}</td>
       </tr>
     {% else %}
       <tr><td colspan="4" class="muted">No locations with this verdict.</td></tr>

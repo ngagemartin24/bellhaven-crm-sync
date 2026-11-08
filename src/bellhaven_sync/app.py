@@ -19,6 +19,7 @@ from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import apply, rules
 from .config import Config
@@ -572,8 +573,8 @@ def create_app(
             request, card_id, csrf, version, "discard", lambda c: apply.discard(c.id, ledger, crm_factory())
         )
 
-    @app.exception_handler(HTTPException)
-    def refused(request: Request, exc: HTTPException):
+    @app.exception_handler(StarletteHTTPException)  # also the router's own 404 and 405
+    def refused(request: Request, exc: StarletteHTTPException):
         response = templates.TemplateResponse(
             request,
             "message.html",
