@@ -8,18 +8,18 @@ fake could not (see "Found in real use").
 
 | Tool | What it checked | Before | After |
 |---|---|---|---|
-| pytest | matching, billing rule, proposals, decision memory, writes, retries, the app, the CLI | 170 tests | 198 tests pass |
+| pytest | matching, billing rule, proposals, decision memory, writes, retries, the app, the CLI | 170 tests | 203 tests pass |
 | Playwright (browser test) | approve, reject, re-run in a real browser; page fits the window | 1 pass | 1 pass |
 | axe-core 4.10.3 | WCAG 2.2 A/AA on all 42 cards, Locations and History, at 1280x800 and 390x844 | 11 serious | 0 |
 | Manual WCAG 2.2 audit | keyboard, focus, reflow at 320px and 400% zoom, contrast, screen-reader semantics | 15 findings | all 15 fixed |
 | Lighthouse 12 | four pages, desktop and mobile | 100 / 100 / 75-76 / 90 | 100 / 100 / 79 / 100 |
 | Security review and probe | request forgery, host checks, where the CRM key can appear, escaping, headers | 2 medium, 4 low | fixed, one low accepted by design |
 | gitleaks, trivy, semgrep | secrets in history and files, dependency CVEs, Python code patterns | clean | clean |
-| Independent code review (GPT-6 Astra) | correctness and safety of every change, nine rounds | | round 9: PASS, no findings |
+| Independent review (GPT-6 Astra; Fable 5.1 for the final pass) | design (4 rounds), code (6 rounds), then the whole submission | | code rounds 8-10 PASS; final review: CRM correct, findings fixed |
 | impeccable audit | accessibility, performance, theming, responsive, implementation integrity | | 18 / 20 |
 
 Lighthouse columns are Performance / Accessibility / Best Practices / SEO. The Best Practices points still missing
-are HTTPS checks: the app is meant to run on a private network over plain HTTP (Tailscale encrypts the traffic).
+are HTTPS checks: the app is meant to run on a private network over plain HTTP.
 
 ## Found in real use
 
@@ -64,9 +64,13 @@ all eight runs, largest paint 0.2 s on desktop and 0.8 s on mobile, layout shift
 
 ## Code review
 
-GPT-6 Astra reviewed the design four times and the code five times. Round 9 covered the hardening, the live-bug fix
-and the tab icon, and passed with no findings ("Read-back failures preserve uncertainty and audit evidence; Retry and
-Discard remain safe").
+GPT-6 Astra reviewed the design four times (rounds 1-4) and the code six times (rounds 5-10). Rounds 5-7 failed and
+each finding got a failing test before its fix; rounds 8-10 passed with no findings. Round 9 covered the hardening,
+the live-bug fix and the tab icon ("Read-back failures preserve uncertainty and audit evidence; Retry and Discard
+remain safe"). A final review of the whole submission (round 11), by Astra and separately by Fable 5.1, re-derived
+the corrected CRM from the data and agreed with it everywhere. It found a related-account check that ran only
+before the first write, an evidence row that claimed a match it had not compared, a missing single-process test and
+several documentation errors; all are fixed (DESIGN Appendix B9).
 
 ## impeccable audit
 
@@ -94,6 +98,6 @@ Recorded with Playwright on a test copy, captions and a visible cursor added, no
 ## Run the checks yourself
 
 ```
-uv run pytest -q          # 198 tests, about 25 s
+uv run pytest -q          # 203 tests, about 25 s
 uv run pytest -m e2e -q   # the browser test (needs `uv run playwright install chromium` once)
 ```

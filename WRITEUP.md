@@ -49,7 +49,7 @@ is created under Bellhaven. Otherwise the account moves directly.
 | Lima | Under Harborview; $47,000 revenue, $0 AR | Not both, so moved directly |
 | Findlay | No parent; $22,000 revenue, $0 AR | Parent set directly |
 | Zanesville | Under Cedar Trail as "Cedar Trail of Zanesville"; $0 | Moved directly and renamed |
-| Kettering | Three copies at 3313 Wilmington Pike, all $0, no contacts, none under Bellhaven | Kept Harborview's copy (the last tie-break), moved and renamed it; the other two marked duplicates |
+| Kettering | Three copies at 3313 Wilmington Pike, all $0, no contacts, none under Bellhaven | Kept Harborview's copy (they tie until the Harborview tie-break), moved and renamed it; the other two marked duplicates |
 | Owosso | Two copies; the retired one holds the only contact, Tricia Lindqvist | Retired the copy and moved her to the survivor in the same change |
 | Monroe, Port Clinton, Erie | Copies left over from Harborview and Cedar Trail | Duplicates of the survivor, Inactive |
 | Sandusky | Off the website; $130,000 / $5,200; Millstone Care of Sandusky already exists at 2715 Columbus Ave, Skilled Nursing | The one exception to the rule's wording. An account already existed under Millstone at the same full address and care type. I used it as the successor rather than create a duplicate, and set only the old account's pointer |
@@ -86,7 +86,8 @@ waits whenever the latest website read was incomplete.
 I set the requirements and made every judgment call above in a structured interview with Claude Code, which
 then wrote the design, the plan, the code and the tests to that spec. A second model, GPT-6 Astra, reviewed
 the design four times and the code six times, independently; the last three code reviews passed with no
-findings. The reviews found real problems, mostly in the write path: retries, lost answers, a run racing a
+findings. A final review of the whole submission, by Astra and separately by Fable 5.1, confirmed the
+corrected CRM and found one more write-path gap and a mislabelled evidence row; both are fixed and tested. The reviews found real problems, mostly in the write path: retries, lost answers, a run racing a
 reviewer. Each one got a failing test before its fix. For the answers themselves, a fresh Astra session that
 never saw my design classified every location from the same website and CRM data. It reached the same result
 for every location and leftover account except Kettering's survivor, where the three copies tie on everything
@@ -98,7 +99,8 @@ reading the record back. I made the first two decisions in the app myself (Marie
 40 follow the answer key above: a browser script clicked them through the app's own Approve and Reject buttons
 on my instruction, and History records each one. The demo video was recorded the same way and narrated with an
 ElevenLabs clone of my own voice. This runs on my own agent setup, which keeps the decisions, reviews and test runs on
-record.
+record. The time I report is my own time directing and checking; the agents ran for many more hours on their
+own, building, testing and reviewing.
 
 ## What I'd build next
 

@@ -5,6 +5,13 @@ A daily run reads the website and the CRM, matches every location to its account
 the evidence for each. A person approves or rejects each one in a small review app; nothing reaches the CRM
 without an approval.
 
+## Result on the real CRM
+
+42 proposals: 41 approved, 1 rejected (the Union Square look-alike). The CRM went from 121 accounts and 67
+contacts to 127 and 73. Afterwards `scripts/verify.py` against the real CRM printed `PASS: the CRM matches the
+expected end state (127 accounts and 73 contacts checked)`, and a second run read 35 of 35 locations and 127
+accounts and proposed 0 changes. [WRITEUP.md](WRITEUP.md) lists every judgment call behind those changes.
+
 ## Quick start
 
 ```sh
@@ -65,7 +72,7 @@ ledger (download it before reviewing, push it back after), which the sketch does
 ## Tests
 
 ```sh
-uv run pytest                 # everything except the browser test; no network, a few seconds
+uv run pytest                 # everything except the browser test; no network, about half a minute
 uv run pytest -m e2e          # one browser run: approve, reject, re-run (needs `uv run playwright install chromium`)
 ```
 
@@ -75,11 +82,14 @@ move), re-runs, incomplete website reads, retries and uncertain creates.
 
 ## More
 
-- [docs/DESIGN.md](docs/DESIGN.md): the full design, including the expected outcome for every account.
-- [docs/PLAN.md](docs/PLAN.md): how it was built, task by task.
-- [docs/TESTING.md](docs/TESTING.md): every test and audit (accessibility, Lighthouse, security, code review), what
-  each found and what was fixed, plus seven recorded walkthroughs of the app.
-- [docs/demo.mp4](docs/demo.mp4): the two-minute demo on the real CRM (approve, reject, the change in the CRM
-  browser), narrated with an ElevenLabs clone of my own voice.
 - [WRITEUP.md](WRITEUP.md): the matching approach, the judgment calls, how AI tools were used, and what
   comes next.
+- [docs/demo.mp4](docs/demo.mp4): the two-minute demo on the real CRM (approve, reject, the change in the CRM
+  browser), narrated with an ElevenLabs clone of my own voice.
+- [docs/code-tour.md](docs/code-tour.md): one page on where each part of the code lives.
+- [docs/TESTING.md](docs/TESTING.md): every test and audit (accessibility, Lighthouse, security, code review), what
+  each found and what was fixed, plus seven recorded walkthroughs of the app.
+
+Written before the build and kept as a record: [docs/DESIGN.md](docs/DESIGN.md), the full design with the
+expected outcome for every account (its "As built" note says where the real run differed), and
+[docs/PLAN.md](docs/PLAN.md), the task-by-task build plan.

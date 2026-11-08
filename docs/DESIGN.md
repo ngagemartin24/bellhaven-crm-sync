@@ -1,15 +1,16 @@
 # Bellhaven CRM sync: design
 
 Status: v5, 2026-11-07, revised after four independent review rounds by GPT-6-Astra and a spec/plan
-consistency check (dispositions in Appendix B).
+consistency check (dispositions in Appendix B). Author: Gage Martin, built with Claude Code. Every decision
+traces to Appendix A (ids like `D4`).
 
 > **As built (2026-11-08).** This spec was written before the build and is kept as written; Appendix B records
 > every later review. Where the real run differed: the first real approvals were Marietta and Kettering, not
-> the Grove City and Batavia cards planned in section 2; Gage made two decisions in the app himself and a
-> browser script clicked the other 40 through the same buttons on his instruction (section 15); the demo is a
+> the Grove City and Batavia cards planned in the Clarifications and section 12; Gage made two decisions in the
+> app himself and a browser script clicked the other 40 through the same buttons on his instruction; the demo is a
 > captioned recording of the real CRM, narrated with an ElevenLabs clone of his voice. The planned
 > `docs/api-notes.md` and repo cheat sheet were not kept; what the real CRM showed is in docs/TESTING.md
-> ("Found in real use"). Author: Gage Martin, built with Claude Code. Every decision traces to Appendix A (ids like `D4`).
+> ("Found in real use").
 
 ## 1. Purpose
 
@@ -567,11 +568,11 @@ pytest against an in-memory fake CRM loaded from `tests/fixtures/snapshot/`; the
   twice changes nothing; abbreviation-equivalent pairs normalize equal; PO Box detection).
 - `test_scrape`: saved HTML yields 35 locations including Findlay; a failed page, an invalid page and a short
   count each mark the run incomplete; a home page saying 34 with 34 found is complete.
-- `test_answer_key`: the run produces exactly the 42 cards of section 9.
+- `test_propose`: the run produces exactly the 42 cards of section 9.
 - `test_end_state`: approve the 41 intended cards and reject the Union Square Possible match on the fake CRM;
   the result equals section 9, and revenue, AR, the three old CHOW accounts' other fields and the 70
   unrelated accounts are unchanged field by field.
-- `test_billing_rule`: Tiffin and Marietta take the new-account route; Lima and Findlay re-parent directly;
+- `test_match` and `test_propose` (billing): Tiffin and Marietta take the new-account route; Lima and Findlay re-parent directly;
   Akron, Defiance and Meadville get no parent or CHOW change; Sandusky points at 63BVK3 and nothing else.
 - `test_rerun`: after the end-state run, a second run proposes nothing; after rejections, nothing returns;
   a rejected two-field card whose street is fixed elsewhere does not return as a phone-only card; a rejected
@@ -596,7 +597,7 @@ pytest against an in-memory fake CRM loaded from `tests/fixtures/snapshot/`; the
   raises one attention card.
 - `test_locations`: the Locations page and the run's table list 35 locations and 3 leftover accounts; the 9
   unchanged rows of 9.1 show as Confident match and Ashtabula as Medium match, nothing to change.
-- `test_readonly`: the pipeline's client raises on every write method.
+- `test_crm`: the pipeline's client raises on every write method.
 - `test_app_security`: a write without the anti-forgery token, by GET, or against a changed card version is refused.
 - `test_single_process`: a second `serve` on the same database refuses to start.
 - `test_actions`: Retry, Check again and Discard succeed through their HTTP endpoints from their allowed states
@@ -625,7 +626,7 @@ pytest against an in-memory fake CRM loaded from `tests/fixtures/snapshot/`; the
 - `WRITEUP.md`: matching approach; every judgment call with its evidence; the billing rule, with Sandusky
   stated as the one exception ("An account already existed under Millstone at the same full address and care
   type. I used it as the CHOW successor rather than create a duplicate, and set only the old account's
-  pointer."); how AI tools were used; what I'd build next; time by session; the verifier's output.
+  pointer."); how AI tools were used; what I'd build next; the verifier's output.
 - The form's writeup box: ~250–300 plain-text words (matching ~120, AI ~80, next ~60) ending with the link to
   `WRITEUP.md` (K2). "Next" leads with Medicare's public ownership files (K3).
 - Demo video (I2): recorded with Cap at the start of the review session, after the off-camera first writes
@@ -756,14 +757,6 @@ Round-1 status: 17 resolved, 8 partial (F3, F4, F9, F10, F14, F20, F23 and the N
 | F14 an inactive account could be the successor | 8.6: the successor must be Active, eligible and compatible; consolidation named as such |
 | F20 crowded video | 18: Tiffin approve, Union Square reject, CRM browser |
 
-## Appendix B4. Independent review round 4 (GPT-6-Astra, 2026-11-07)
-
-Verdict on v4: NOT SOUND on one Major (R4-1: uncertain-create Discard could abandon an operation whose first
-create had landed). N5 resolved: the 10-minute bound is adequate for this use, with the disclosed residual risk.
-Section 9 byte-for-byte unchanged; 42 cards, 41/1, 127 accounts, 73 contacts re-derived. Fixed in v5: 10.4 and
-11 step 5 refuse Discard from either state once any write in the operation is confirmed; PLAN Task 6 and a Task 7
-test (account landed, administrator uncertain, Discard refused after 10 minutes).
-
 ## Appendix B3. Independent review round 3 (GPT-6-Astra) and consistency check, 2026-11-07
 
 Round 3 verdict on v3: not sound on uncertain creates and plan consistency; section 9 confirmed byte-for-byte
@@ -786,6 +779,14 @@ unchanged and re-derived (42 / 41 + 1 / 127 / 73). Round-2 items: 10 resolved, 4
 | Consistency B1 Discard rule vague | 11 step 5 |
 | Consistency F3 proportion | 18: two-layer code tour |
 | Consistency F4 wording | 8.5, 12, 13 |
+
+## Appendix B4. Independent review round 4 (GPT-6-Astra, 2026-11-07)
+
+Verdict on v4: NOT SOUND on one Major (R4-1: uncertain-create Discard could abandon an operation whose first
+create had landed). N5 resolved: the 10-minute bound is adequate for this use, with the disclosed residual risk.
+Section 9 byte-for-byte unchanged; 42 cards, 41/1, 127 accounts, 73 contacts re-derived. Fixed in v5: 10.4 and
+11 step 5 refuse Discard from either state once any write in the operation is confirmed; PLAN Task 6 and a Task 7
+test (account landed, administrator uncertain, Discard refused after 10 minutes).
 
 ## Appendix B5. Code review, round 5 (GPT-6-Astra, 2026-11-07)
 
@@ -827,3 +828,27 @@ Verdict FAIL at 7d4184e: the three round-6 findings resolved, AC-1 to AC-8 passe
 
 Discard still reads only steps whose outcome is unknown: once a step's status is truthful, a definite refusal
 means the write did not land, and re-reading those would only strand cards that someone edited afterwards.
+
+## Appendix B8. Code reviews, rounds 8 to 10 (GPT-6-Astra, 2026-11-08)
+
+Round 8 at e7ab697: PASS; the round-7 finding resolved, AC-1 to AC-9 pass. Round 9 at 17bdde1 (the live update
+fix, the hardening from the testing pass, the tab icon): PASS, no findings. Round 10 at 264a82b (accessibility,
+Lighthouse and layout fixes): PASS, no findings.
+
+## Appendix B9. Final whole-submission review, round 11 (GPT-6-Astra and Fable 5.1, 2026-11-08)
+
+Both reviewers read the repo at 836a3ef, the brief, a read-only pull of the final CRM, the decision history and
+stills from the demo, each without seeing the other. Both returned FIX FIRST, and both re-derived the corrected
+CRM: it matches section 9 for every location and leftover account, and no billing value changed.
+
+| Finding | Fix |
+|---|---|
+| Related accounts were checked once before the first write; a survivor retired during an approval's earlier steps did not stop a later step (Astra) | every step rechecks them right before it writes; `test_survivor_retired_between_steps_stops_the_contact_move` |
+| The side-by-side table called the Care and Administrator rows matching without comparing them (Astra) | compared with the care mapping and by person; a row the website has no value for makes no claim |
+| README had the match gate and weights wrong; the Medium row left out a differing street; "every judgment call in one file" overclaimed (Astra) | reworded to `rules.py` as built |
+| 7 renames vs 9; the verifier's time; review-round counts disagreed; one font vs two; the header said v4 (both) | corrected |
+| Planned names left stale: first approvals, `docs/api-notes.md`, test names, "time by session" (both) | the "As built" note; section 16 names corrected |
+| The single-process test promised in section 16 did not exist (Fable) | `tests/test_single_process.py`, shown to fail without the lock |
+| The Actions sketch could push a fresh ledger over saved decisions after a failed restore (Astra) | it stops instead, and says what it does not automate |
+| The time figure needs to say the agents ran beyond the owner's time (Fable) | stated in WRITEUP |
+| The CRM browser link carries the key; could the video show it? (Fable) | checked: the key is only in link addresses on the CRM's pages, never visible text, and the recording has no address bar |
