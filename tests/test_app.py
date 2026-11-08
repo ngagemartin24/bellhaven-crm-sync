@@ -1,4 +1,5 @@
 import html
+import re
 
 import pytest
 from conftest import CFG_AT, DAY, SNAP, ledger_with_card_in
@@ -28,8 +29,8 @@ def test_approve_then_already_decided(env):
     c = env.pending("rename", account="6K5BGN")
     r = env.post(c, "approve", follow_redirects=True)
     assert "Approved: 1 of 1 writes done" in r.text
-    r2 = env.post(c, "approve")
-    assert r2.status_code == 409 and len(env.fake.writes) == 1
+    r2 = env.post(c, "approve")  # a double click: back to the card, already written, no second write
+    assert r2.status_code == 303 and len(env.fake.writes) == 1
 
 
 def test_reject_with_note_lands_in_history(env):
@@ -48,7 +49,10 @@ def test_interrupted_apply_offers_retry(tmp_path):
     c = l.cards("failed")[0]
     r = client.post(
         f"/cards/{c.id}/retry",
-        data={"csrf": client.cookies["bh_csrf"], "version": c.version},
+        data={
+            "csrf": re.search(r'name="csrf" value="([^"]+)"', client.get(f"/?card={c.id}").text).group(1),
+            "version": c.version,
+        },
         follow_redirects=True,
     )
     assert r.status_code == 200 and l.card(c.id).status == "done"  # consistency E5
@@ -75,7 +79,9 @@ def test_every_card_renders(env):  # no proposal kind breaks the page
 def test_crm_link_carries_the_account(env):
     c = env.pending("details", account="NRLNME")
     html = env.client.get(f"/?card={c.id}").text
-    assert f"http://crm.invalid/crm/test-token/accounts/{c.account_ids[0]}" in html
+    assert f'href="/crm/{c.account_ids[0]}"' in html  # the app redirects; the key stays out of the page
+    r = env.client.get(f"/crm/{c.account_ids[0]}", follow_redirects=False)
+    assert r.headers["location"] == f"http://crm.invalid/crm/test-token/accounts/{c.account_ids[0]}"
 
 
 @pytest.mark.parametrize("path", ["/", "/locations", "/history"])
@@ -89,6 +95,10 @@ def test_queue_link_name_contains_its_visible_text(env):
     # WCAG 2.5.3 Label in Name: on narrow screens the rail shows "Queue" and the count, so the
     # accessible name must contain both, in that order.
     page = env.client.get("/").text
-    link = page[page.index('<a href="/" title="Review queue') : page.index("</a>", page.index('<a href="/" title="Review queue'))]
+    link = page[
+        page.index('<a href="/" title="Review queue') : page.index(
+            "</a>", page.index('<a href="/" title="Review queue')
+        )
+    ]
     assert 'aria-label="Queue, 42 to decide"' in link
     assert link.index('class="rail-label">Queue<') < link.index('class="count num">42<')

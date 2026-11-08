@@ -315,7 +315,11 @@ class AppEnv:
 
     @property
     def token(self):
-        return self.client.cookies["bh_csrf"]
+        """The form token, read from a page as a browser would (it is signed, so not the cookie itself)."""
+        import re
+
+        page = self.client.get(f"/?card={self.any_pending().id}").text
+        return re.search(r'name="csrf" value="([^"]+)"', page).group(1)
 
     def pending(self, kind, slug=None, account=None):
         return only(self.l.cards("pending"), kind=kind, slug=slug, account=account)

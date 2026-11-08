@@ -77,3 +77,27 @@ def test_flag_unknown_card_exits_1(wired, capsys):
     cli.main(["run"])
     assert cli.main(["flag", "nope", "x"]) == 1
     assert "No card nope" in capsys.readouterr().err
+
+
+def test_serve_answers_only_to_its_own_address(tmp_path, monkeypatch):
+    # The served app refuses any other Host header (DNS rebinding); in-process test apps skip the check.
+    import uvicorn
+    from fastapi.testclient import TestClient
+
+    from bellhaven_sync.cli import _serve
+    from bellhaven_sync.config import Config
+
+    served = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: served.update(app=app, **kw))
+    cfg = Config(
+        "http://site.invalid",
+        "http://crm.invalid/api/v1",
+        "http://crm.invalid/crm/{token}/accounts/{account_id}",
+        "Bellhaven Senior Living (Parent Account)",
+        tmp_path / "d.db",
+        "test-token",
+    )
+    assert _serve(cfg, "100.64.0.1", 8771) == 0 or served
+    client = TestClient(served["app"], base_url="http://100.64.0.1:8771")
+    assert client.get("/").status_code == 200
+    assert client.get("/", headers={"host": "rebound.example:8771"}).status_code == 400

@@ -13,10 +13,10 @@ from datetime import date, datetime
 from functools import cached_property
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, unquote, urlencode
+from urllib.parse import quote, unquote, urlencode, urlsplit
 
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -106,9 +106,10 @@ class View:
         self.cfg, self.ledger = cfg, ledger
 
     def crm_link(self, account_id: str | None) -> str | None:
+        """An app route that redirects to the CRM's own page on click, so the CRM key never sits in a page."""
         if not account_id or not self.cfg.token:
             return None
-        return self.cfg.crm_browser_url.format(token=quote(self.cfg.token), account_id=quote(account_id))
+        return f"/crm/{quote(account_id)}"
 
     def names(self, card) -> dict[str, str]:
         out = {}
@@ -288,19 +289,73 @@ def _norm(v) -> str:
     return " ".join(str(v or "").lower().replace(".", "").replace(",", "").split())
 
 
+SECURITY_HEADERS = {
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    # same-origin, not no-referrer: under no-referrer a browser sends "Origin: null" on our own form posts
+    "Referrer-Policy": "same-origin",
+    "Content-Security-Policy": (
+        "default-src 'self'; img-src 'self' data:; style-src 'self'; font-src 'self'; form-action 'self'; "
+        "frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
+    ),
+}
+
+
+def _host_name(host_header: str) -> str:
+    if host_header.startswith("["):
+        return host_header[1 : host_header.find("]")]
+    return host_header.split(":")[0]
+
+
 def create_app(
-    cfg: Config, ledger: Ledger, crm_factory: Callable[[], Any], today: Callable[[], date]
+    cfg: Config,
+    ledger: Ledger,
+    crm_factory: Callable[[], Any],
+    today: Callable[[], date],
+    allowed_hosts: tuple[str, ...] | None = None,
 ) -> FastAPI:
+    """allowed_hosts: the names the app answers to (the serve command passes its bind address and loopback);
+    None skips the check, for tests that build the app in-process."""
     _lock(ledger.path)
     recovered = ledger.recover_interrupted()
     app = FastAPI(title="Bellhaven CRM sync", docs_url=None, redoc_url=None, openapi_url=None)
     app.mount("/static", StaticFiles(directory=ROOT / "static"), name="static")
     templates = Jinja2Templates(directory=ROOT / "templates")
     templates.env.filters["fromjson"] = lambda v: json.loads(v) if v else {}
+    form_secret = secrets.token_bytes(32)  # per process: a restart expires open forms
+
+    def sign(nonce: str) -> str:
+        return hmac.new(form_secret, nonce.encode(), "sha256").hexdigest()
+
+    @app.middleware("http")
+    async def guard(request: Request, call_next):
+        host = request.headers.get("host", "")
+        if allowed_hosts is not None and _host_name(host) not in allowed_hosts:
+            return PlainTextResponse("Unknown host", status_code=400, headers=SECURITY_HEADERS)
+        if request.method == "POST":
+            source = request.headers.get("origin") or request.headers.get("referer")
+            if source is not None and urlsplit(source).netloc != host:
+                response = templates.TemplateResponse(
+                    request,
+                    "message.html",
+                    {
+                        "status": 403,
+                        "title": "Refused",
+                        "message": "This form came from another site, so nothing was written.",
+                    },
+                    status_code=403,
+                )
+                response.headers.update(SECURITY_HEADERS)
+                return response
+        response = await call_next(request)
+        response.headers.update(SECURITY_HEADERS)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     def page(request: Request, name: str, **ctx) -> HTMLResponse:
         view = View(cfg, ledger)
-        token = request.cookies.get("bh_csrf") or secrets.token_urlsafe(32)
+        nonce = request.cookies.get("bh_csrf") or secrets.token_urlsafe(32)
         flash = unquote(request.cookies.get("bh_flash") or "") or None
         flash_kind = request.cookies.get("bh_flash_kind", "ok")
         run = ledger.latest_run()
@@ -309,7 +364,7 @@ def create_app(
             request,
             name,
             {
-                "csrf": token,
+                "csrf": sign(nonce),
                 "flash": flash,
                 "flash_kind": flash_kind,
                 "run": run,
@@ -325,7 +380,7 @@ def create_app(
             },
         )
         if "bh_csrf" not in request.cookies:
-            response.set_cookie("bh_csrf", token, httponly=True, samesite="strict", secure=False)
+            response.set_cookie("bh_csrf", nonce, httponly=True, samesite="strict", secure=False)
         if flash:
             response.delete_cookie("bh_flash")
             response.delete_cookie("bh_flash_kind")
@@ -418,17 +473,30 @@ def create_app(
 
     def act(request: Request, card_id: str, csrf: str, version: str, action: str, run: Callable):
         cookie = request.cookies.get("bh_csrf") or ""
-        if not cookie or not hmac.compare_digest(cookie, csrf or ""):
-            raise HTTPException(403, "This form has expired. Reload the page and try again.")
+        if not cookie or not hmac.compare_digest(sign(cookie), csrf or ""):
+            raise HTTPException(
+                403,
+                "This page was open from before the app restarted, so nothing was written. Go back to the queue and try again.",
+            )
         try:
             card = ledger.card(card_id)
         except KeyError as e:
             raise HTTPException(404, "No such proposal") from e
+        if card.status in CLOSED:
+            return to_card(
+                card.id,
+                f"{card.title}: Already decided: {STATUS_WORDS[card.status]}. Nothing more was written.",
+                "ok",
+            )
         if card.version != version:
-            raise HTTPException(409, "This card changed since you opened it. Reload.")
+            return to_card(
+                card.id,
+                f"{card.title}: This card changed since you opened it, so nothing was written. This is its current version.",
+                "bad",
+            )
         result = run(card)
         if result.status == "refused":
-            raise HTTPException(409, result.message)
+            return to_card(card.id, f"{card.title}: {result.message}. Nothing was written.", "bad")
         words = {
             "approve": "Approved",
             "retry": "Retried",
@@ -444,12 +512,20 @@ def create_app(
         else:
             message, kind = result.message, "bad"
         target = card.id if result.status != "done" else (next_card(card) or card.id)
+        return to_card(target, f"{card.title}: {message}", kind)
+
+    def to_card(target: str, message: str, kind: str) -> RedirectResponse:
         response = RedirectResponse(f"/?{urlencode({'card': target})}#card-{target}", status_code=303)
-        response.set_cookie(
-            "bh_flash", quote(f"{card.title}: {message}"), max_age=30, httponly=True, samesite="strict"
-        )
+        response.set_cookie("bh_flash", quote(message), max_age=30, httponly=True, samesite="strict")
         response.set_cookie("bh_flash_kind", kind, max_age=30, httponly=True, samesite="strict")
         return response
+
+    @app.get("/crm/{account_id}")
+    def crm_page(account_id: str):
+        if not cfg.token or not account_id.isalnum():
+            raise HTTPException(404, "No CRM page for that account")
+        url = cfg.crm_browser_url.format(token=quote(cfg.token), account_id=quote(account_id))
+        return RedirectResponse(url, status_code=302)
 
     @app.post("/cards/{card_id}/approve")
     def approve_card(

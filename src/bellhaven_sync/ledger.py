@@ -5,6 +5,7 @@ re-run can never move a card twice. Decisions are stored per change key, never p
 """
 
 import json
+import os
 import secrets
 import sqlite3
 import threading
@@ -78,6 +79,8 @@ def _steps_json(steps) -> str:
 class Ledger:
     def __init__(self, path: Path | str):
         self.path = Path(path)
+        self.path.touch(mode=0o600, exist_ok=True)  # CRM names and phones: owner-only (its WAL files follow)
+        os.chmod(self.path, 0o600)
         self._db = sqlite3.connect(self.path, isolation_level=None, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")

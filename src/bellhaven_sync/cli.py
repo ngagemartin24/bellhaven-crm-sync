@@ -104,7 +104,13 @@ def _serve(cfg: Config, host: str, port: int) -> int:
         return 2
     ledger = Ledger(cfg.db_path)
     try:
-        app = create_app(cfg, ledger, lambda: CrmClient(cfg.crm_url, cfg.token, read_only=False), _today)
+        app = create_app(
+            cfg,
+            ledger,
+            lambda: CrmClient(cfg.crm_url, cfg.token, read_only=False),
+            _today,
+            allowed_hosts=(host, "127.0.0.1", "localhost", "::1"),
+        )
     except AppLockedError as e:
         print(e, file=sys.stderr)
         return 2

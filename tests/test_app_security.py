@@ -28,8 +28,8 @@ def test_get_cannot_write(env):
 
 def test_changed_version_refused(env):
     c = env.any_pending()
-    assert (
-        env.client.post(f"/cards/{c.id}/approve", data={"csrf": env.token, "version": "stale"}).status_code
-        == 409
+    r = env.client.post(
+        f"/cards/{c.id}/approve", data={"csrf": env.token, "version": "stale"}, follow_redirects=False
     )
+    assert r.status_code == 303 and env.l.card(c.id).status == "pending"
     assert env.fake.writes == []

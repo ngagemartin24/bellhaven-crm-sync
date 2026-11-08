@@ -4,9 +4,12 @@ def test_actions_from_allowed_states_only(env):  # round 3, P1
     recon = env.card_in_status("needs-reconciliation")
     assert env.post(recon, "check-again").status_code == 303
     p = env.any_pending()
-    assert env.post(p, "retry").status_code == 409
-    assert env.post(p, "check-again").status_code == 409
-    assert env.post(p, "acknowledge").status_code == 409
+    writes = len(env.fake.writes)
+    for action in ("retry", "check-again", "acknowledge"):
+        r = env.post(p, action)  # refused: back to the card, saying nothing was written
+        assert r.status_code == 303 and r.headers["location"].startswith(f"/?card={p.id}")
+        assert "Nothing was written" in env.client.get(r.headers["location"]).text
+        assert env.l.card(p.id).status == "pending" and len(env.fake.writes) == writes
 
 
 def test_failed_card_shows_message_retry_and_discard(env):
