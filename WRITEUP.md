@@ -80,12 +80,19 @@ waits whenever the latest website read was incomplete.
 
 I set the requirements and made every judgment call above in a structured interview with Claude Code, which
 then wrote the design, the plan, the code and the tests to that spec. A second model, GPT-6 Astra, reviewed
-the design four times and the code four times, independently, until a review passed with no findings. The reviews found real problems, mostly in the write
-path: retries, lost answers, a run racing a reviewer. Each one got a failing test before its fix. For the
-answers themselves, a fresh Astra session that never saw my design classified every location from the same
-website and CRM data. It reached the same result for every location and leftover account except Kettering's survivor, where the
-three copies tie on everything but their history, and I kept Harborview's copy. I clicked every approval
-myself. This runs on my own agent setup, which keeps the decisions, reviews and test runs on record.
+the design four times and the code six times, independently; the last three code reviews passed with no
+findings. The reviews found real problems, mostly in the write path: retries, lost answers, a run racing a
+reviewer. Each one got a failing test before its fix. For the answers themselves, a fresh Astra session that
+never saw my design classified every location from the same website and CRM data. It reached the same result
+for every location and leftover account except Kettering's survivor, where the three copies tie on everything
+but their history, and I kept Harborview's copy.
+
+The first real approvals showed one thing the fake CRM had hidden: the real CRM answers an update with only the
+record's id, so every update read as unconfirmed. The writes had all landed; the app now confirms an update by
+reading the record back. I made five decisions in the app myself, including the two in the video. The other 37
+approvals follow the answer key above, and a browser script clicked them through the app's own Approve button
+on my instruction; History records each one with a note saying so. This runs on my own agent setup, which
+keeps the decisions, reviews and test runs on record.
 
 ## What I'd build next
 
