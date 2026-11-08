@@ -72,5 +72,7 @@ move), re-runs, incomplete website reads, retries and uncertain creates.
 
 - [docs/DESIGN.md](docs/DESIGN.md): the full design, including the expected outcome for every account.
 - [docs/PLAN.md](docs/PLAN.md): how it was built, task by task.
+- [docs/TESTING.md](docs/TESTING.md): every test and audit (accessibility, Lighthouse, security, code review), what
+  each found and what was fixed, plus seven recorded walkthroughs of the app.
 - [WRITEUP.md](WRITEUP.md): the matching approach, the judgment calls, how AI tools were used, and what
   comes next.
