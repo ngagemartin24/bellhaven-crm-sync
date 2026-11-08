@@ -808,3 +808,14 @@ findings remained. Each was reproduced as a failing test first.
 | 1 a duplicate retirement did not check the survivor's `chow_current_account` | the survivor's sale pointer is in the retirement's expectations; `test_sold_survivor_stops_the_duplicate_retirement` |
 | 2 Discard compared a lost update's whole note, so a later staff note hid a landed write | Discard reads each field of an update sent without a definite answer: our value means landed, the before-value means not landed, anything else is refused for a person; a note counts as landed when it holds the line this update added; three tests |
 | 3 a decision database from before the absence flag would crash | `PRAGMA user_version` schema version; an older database gains the column in one transaction, absence cards marked, history kept; `test_ledger_upgrade` |
+
+## Appendix B7. Code review, round 7 (GPT-6-Astra, 2026-11-08)
+
+Verdict FAIL at 7d4184e: the three round-6 findings resolved, AC-1 to AC-8 passed, one new Major finding on AC-9.
+
+| Finding | Fix |
+|---|---|
+| A definite error on Retry's first read (for example a 429) marked an earlier uncertain write "failed", so Discard skipped it and a landed retirement could be abandoned | "sent" now means this attempt stamped a new intent; an earlier attempt's uncertain step keeps its status and the card says the write may have landed. `step_failed` has no other caller. `test_a_read_error_during_retry_keeps_an_earlier_write_uncertain` |
+
+Discard still reads only steps whose outcome is unknown: once a step's status is truthful, a definite refusal
+means the write did not land, and re-reading those would only strand cards that someone edited afterwards.

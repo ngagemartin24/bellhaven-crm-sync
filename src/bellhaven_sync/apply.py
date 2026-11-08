@@ -229,8 +229,19 @@ def _run(op_id: int, ledger: Ledger, crm) -> ApplyResult:
         ledger.finish_operation(op_id, "failed", str(e))
         return ApplyResult("failed", done, m, str(e))
     except (CrmError, requests.RequestException) as e:
-        sent = current.n in {s["n"] for s in ledger.operation(op_id)["steps"]}
+        # sent now = this attempt stamped a new intent; a row left by an earlier attempt keeps its own status
+        row = next((s for s in ledger.operation(op_id)["steps"] if s["n"] == current.n), None)
+        sent = row is not None and row["intent_at"] != log.get(current.n, {}).get("intent_at")
         definite = isinstance(e, CrmError) and not _uncertain(e)
+        if row is not None and not sent and row["status"] in ("intent", "unknown"):
+            why = e.message if isinstance(e, CrmError) else f"no answer, {type(e).__name__}"
+            message = (
+                f"Could not check step {current.n} of {m} ({why}). An earlier attempt's write there may have "
+                "landed; Retry checks the CRM again"
+            )
+            status = "needs-reconciliation" if current.method == "POST" else "failed"
+            ledger.finish_operation(op_id, status, message)
+            return ApplyResult(status, done, m, message)
         if not sent or definite:
             message = f"Failed at step {current.n} of {m}: " + (
                 e.message if isinstance(e, CrmError) else f"no answer from the CRM ({type(e).__name__})"

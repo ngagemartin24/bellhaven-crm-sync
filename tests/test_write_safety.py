@@ -175,6 +175,19 @@ def test_an_update_that_did_not_land_can_be_discarded(tmp_path):
     assert crm.get_account(full_id("15UA71"))["status"] == "Active" and crm.writes == []
 
 
+def test_a_read_error_during_retry_keeps_an_earlier_write_uncertain(tmp_path):
+    l, crm = ready(tmp_path)
+    c = dup_card(l, "bellhaven-of-owosso")
+    crm.lose_next_response("PATCH")  # the retirement lands; its answer is lost
+    assert approve(c.id, c.version, l, crm).status == "failed"
+    crm.fail_next("GET", 429, "Too Many Requests")  # Retry cannot even read the record
+    r = retry(c.id, l, crm)
+    assert r.status == "failed" and "may have landed" in r.message
+    assert discard(c.id, l, crm).status == "refused"
+    assert retry(c.id, l, crm).status == "done"
+    assert crm.get_contact(contact_id("Tricia Lindqvist"))["account_id"] == full_id("2ZTRE6")
+
+
 def test_a_server_error_on_a_create_is_uncertain(tmp_path):
     l, crm = ready(tmp_path)
     c = new_card(l, "bellhaven-of-batavia")
