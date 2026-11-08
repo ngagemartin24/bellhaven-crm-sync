@@ -59,12 +59,15 @@ ADDRESS = ("billing_street", "billing_city", "billing_state", "billing_zip")
 
 
 def _survivor_still(acc: Account, loc: Location) -> dict:
-    """What a duplicate retirement rests on, for the survivor it does not write: still a live, separate account at
-    the reviewed place (or at the website's, should a details card have synced it first)."""
+    """What a duplicate retirement rests on, for the survivor it does not write: still a live, separate, unsold
+    account at the reviewed place (or at the website's, should a details card have synced it first)."""
     return {
         "path": f"/accounts/{acc['account_id']}",
         "label": acc.get("name") or acc["account_id"],
-        "fields": {"duplicate_of_account": acc.get("duplicate_of_account", "")},
+        "fields": {
+            "duplicate_of_account": acc.get("duplicate_of_account", ""),
+            "chow_current_account": acc.get("chow_current_account", ""),
+        },
         "one_of": {
             "billing_street": [acc.get("billing_street", ""), loc.street],
             "billing_city": [acc.get("billing_city", ""), loc.city],

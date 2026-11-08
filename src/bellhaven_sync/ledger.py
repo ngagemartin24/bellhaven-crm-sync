@@ -20,6 +20,9 @@ from .scrape import ScrapeReport
 RECONCILE_WAIT = timedelta(minutes=10)
 LIVE_OPS = ("applying", "failed", "needs-reconciliation")
 
+SCHEMA_VERSION = 2  # 2: cards.needs_complete_read (cards that rest on a location's absence)
+ABSENCE_KINDS = ("gone", "chow", "duplicates")  # with no website location, these rest on an absence
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
   id INTEGER PRIMARY KEY, started_at TEXT, finished_at TEXT, complete INTEGER, reason TEXT, pages_failed TEXT,
@@ -79,8 +82,31 @@ class Ledger:
         self._db.row_factory = sqlite3.Row
         self._db.execute("PRAGMA journal_mode=WAL")
         self._db.execute("PRAGMA busy_timeout=5000")
-        self._db.executescript(SCHEMA)
         self._lock = threading.RLock()
+        existing = self._db.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='cards'"
+        ).fetchone()
+        version = self._db.execute("PRAGMA user_version").fetchone()[0]
+        if version > SCHEMA_VERSION:
+            raise RuntimeError(f"{self.path} was written by a newer version (schema {version})")
+        self._db.executescript(SCHEMA)
+        if not existing:
+            self._db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+        elif version < SCHEMA_VERSION:
+            self._upgrade()
+
+    def _upgrade(self) -> None:
+        """Version 1 had no absence flag: add it, mark the cards that rest on an absence, keep everything else."""
+        with self.tx() as db:
+            cols = {r["name"] for r in db.execute("PRAGMA table_info(cards)")}
+            if "needs_complete_read" not in cols:
+                db.execute("ALTER TABLE cards ADD COLUMN needs_complete_read INTEGER DEFAULT 0")
+                marks = ",".join("?" * len(ABSENCE_KINDS))
+                db.execute(
+                    f"UPDATE cards SET needs_complete_read=1 WHERE location_slug IS NULL AND kind IN ({marks})",
+                    ABSENCE_KINDS,
+                )
+            db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
 
     def close(self) -> None:
         self._db.close()

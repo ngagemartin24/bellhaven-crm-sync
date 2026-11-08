@@ -412,16 +412,34 @@ def check_again(card_id: str, ledger: Ledger, crm, now: Callable[[], datetime] =
     return _run(op["id"], ledger, crm)
 
 
-def _landed_update(card, crm) -> int | None:
-    """An update this operation sent whose answer never arrived: does the CRM already show it?"""
+def _added_line(before: str, after: str) -> str:
+    """The text an update appended to a note."""
+    return (after.removeprefix(before)).strip()
+
+
+def _update_outcome(card, crm) -> tuple[str, int, str] | None:
+    """For each update sent without a definite answer, read the record. ("landed", n, field) when a field shows this
+    update's value (a note: when it holds the line this update added); ("unclear", n, field) when a field shows
+    neither the value before nor this update's; None when every such update plainly did not land."""
     for s in card.operation["steps"]:
-        if s["method"] != "PATCH" or s["status"] == "done" or s["body"] in (None, "{}", "null"):
+        if s["method"] != "PATCH" or s["status"] not in ("intent", "unknown"):
             continue
-        body = json.loads(s["body"])
+        body = json.loads(s["body"] or "null") or {}
+        before = json.loads(s["before"] or "null") or {}
         kind, rid = s["path"].strip("/").split("/", 1)
         rec = crm.get_account(rid) if kind == "accounts" else crm.get_contact(rid)
-        if all(_same(rec.get(k), v) for k, v in body.items()):
-            return s["n"]
+        unclear = None
+        for k, v in body.items():
+            if k == "note":
+                line = _added_line(before.get("note") or "", v or "")
+                if line and line in (rec.get("note") or ""):
+                    return ("landed", s["n"], k)
+            elif _same(rec.get(k), v):
+                return ("landed", s["n"], k)
+            elif k not in before or not _same(rec.get(k), before[k]):
+                unclear = unclear or k
+        if unclear:
+            return ("unclear", s["n"], unclear)
     return None
 
 
@@ -432,11 +450,19 @@ def discard(card_id: str, ledger: Ledger, crm, now: Callable[[], datetime] = utc
     if any(s["wrote"] for s in card.operation["steps"]):
         return _refused(card, "A write already landed; Retry or Check again finishes it")
     try:
-        landed = _landed_update(card, crm)
+        outcome = _update_outcome(card, crm)
     except (CrmError, requests.RequestException) as e:
         return _refused(card, f"Could not read the CRM to check whether a write landed: {e}")
-    if landed:
-        return _refused(card, f"Step {landed} landed (the CRM shows it); Retry finishes the change")
+    if outcome and outcome[0] == "landed":
+        return _refused(
+            card, f"Step {outcome[1]} landed (the CRM shows its {outcome[2]}); Retry finishes the change"
+        )
+    if outcome:
+        return _refused(
+            card,
+            f"Step {outcome[1]}: the CRM's {outcome[2]} shows neither the value before nor this change's; someone "
+            "changed it since, so a person must check the record before discarding",
+        )
     if not ledger.discard(card.operation["id"], now()):
         return _refused(
             card,

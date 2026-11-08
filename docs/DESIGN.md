@@ -797,3 +797,14 @@ code before fixing, and each now has a test (`tests/test_write_safety.py` unless
 | 9 "none of these" disappeared on the next run | ledger-raised cards are never superseded |
 | AC-7 two ambiguity rules outside `rules.py` | `rules.medium_match`, `rules.look_alike_needs_person`, each tested |
 
+
+## Appendix B6. Code review, round 6 (GPT-6-Astra, 2026-11-08)
+
+Verdict FAIL at 9bd1a19: round-5 defects 1, 3, 4, 6, 7, 8, 9 and AC-7 resolved; AC-1 to AC-8 passed; three Major
+findings remained. Each was reproduced as a failing test first.
+
+| Finding | Fix |
+|---|---|
+| 1 a duplicate retirement did not check the survivor's `chow_current_account` | the survivor's sale pointer is in the retirement's expectations; `test_sold_survivor_stops_the_duplicate_retirement` |
+| 2 Discard compared a lost update's whole note, so a later staff note hid a landed write | Discard reads each field of an update sent without a definite answer: our value means landed, the before-value means not landed, anything else is refused for a person; a note counts as landed when it holds the line this update added; three tests |
+| 3 a decision database from before the absence flag would crash | `PRAGMA user_version` schema version; an older database gains the column in one transaction, absence cards marked, history kept; `test_ledger_upgrade` |

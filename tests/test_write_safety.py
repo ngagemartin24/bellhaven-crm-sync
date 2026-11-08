@@ -55,6 +55,15 @@ def test_retired_survivor_stops_the_duplicate_retirement(tmp_path):
     assert crm.get_contact(contact_id("Tricia Lindqvist"))["account_id"] == full_id("15UA71")
 
 
+def test_sold_survivor_stops_the_duplicate_retirement(tmp_path):
+    l, crm = ready(tmp_path)
+    c = dup_card(l, "bellhaven-of-owosso")
+    crm.patch_account_raw(full_id("2ZTRE6"), {"chow_current_account": full_id("J8DYYV")})
+    r = approve(c.id, c.version, l, crm)
+    assert r.status == "failed" and "chow_current_account" in r.message and crm.writes == []
+    assert crm.get_contact(contact_id("Tricia Lindqvist"))["account_id"] == full_id("15UA71")
+
+
 # ---- an incomplete website read stops every change that rests on an absence -----------------------
 def test_incomplete_read_blocks_the_sale_card(tmp_path):
     l, crm = ready(tmp_path)
@@ -134,6 +143,36 @@ def test_lost_answer_to_an_update_cannot_be_discarded(tmp_path):
     assert r.status == "refused" and "landed" in r.message
     assert retry(c.id, l, crm).status == "done"
     assert crm.get_contact(contact_id("Tricia Lindqvist"))["account_id"] == full_id("2ZTRE6")
+
+
+def test_a_landed_update_whose_note_was_edited_later_cannot_be_discarded(tmp_path):
+    l, crm = ready(tmp_path)
+    c = dup_card(l, "bellhaven-of-owosso")
+    crm.lose_next_response("PATCH")  # the retirement lands; its answer is lost
+    assert approve(c.id, c.version, l, crm).status == "failed"
+    loser = crm.get_account(full_id("15UA71"))
+    crm.patch_account_raw(full_id("15UA71"), {"note": loser["note"] + "\nStaff: called the facility."})
+    r = discard(c.id, l, crm)
+    assert r.status == "refused" and "landed" in r.message
+
+
+def test_an_unclear_update_cannot_be_discarded(tmp_path):
+    l, crm = ready(tmp_path)
+    c = dup_card(l, "bellhaven-of-owosso")
+    crm.fail_next("PATCH", 502, "Bad Gateway")  # no answer we can trust; here it did not land
+    assert approve(c.id, c.version, l, crm).status == "failed"
+    crm.patch_account_raw(full_id("15UA71"), {"status": "Needs Review"})  # someone else changed the field
+    r = discard(c.id, l, crm)
+    assert r.status == "refused" and "status" in r.message
+
+
+def test_an_update_that_did_not_land_can_be_discarded(tmp_path):
+    l, crm = ready(tmp_path)
+    c = dup_card(l, "bellhaven-of-owosso")
+    crm.fail_next("PATCH", 502, "Bad Gateway")
+    assert approve(c.id, c.version, l, crm).status == "failed"
+    assert discard(c.id, l, crm).status == "done"
+    assert crm.get_account(full_id("15UA71"))["status"] == "Active" and crm.writes == []
 
 
 def test_a_server_error_on_a_create_is_uncertain(tmp_path):
