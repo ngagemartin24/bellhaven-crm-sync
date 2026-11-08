@@ -16,6 +16,7 @@ fake could not (see "Found in real use").
 | Security review and probe | request forgery, host checks, where the CRM key can appear, escaping, headers | 2 medium, 4 low | fixed, one low accepted by design |
 | gitleaks, trivy, semgrep | secrets in history and files, dependency CVEs, Python code patterns | clean | clean |
 | Independent review (GPT-6 Astra; Fable 5.1 for the final pass) | design (4 rounds), code (6 rounds), then the whole submission | | code rounds 8-10 PASS; final review: CRM correct, findings fixed |
+| mutmut 3.3.1 (mutation testing) | how many deliberately planted bugs in the four judgment files the tests catch | | 1,784 of 2,907 caught (61%) |
 | impeccable audit | accessibility, performance, theming, responsive, implementation integrity | | 18 / 20 |
 
 Lighthouse columns are Performance / Accessibility / Best Practices / SEO. The Best Practices points still missing
@@ -71,6 +72,28 @@ remain safe"). A final review of the whole submission (round 11), by Astra and s
 the corrected CRM from the data and agreed with it everywhere. It found a related-account check that ran only
 before the first write, an evidence row that claimed a match it had not compared, a missing single-process test and
 several documentation errors; all are fixed (DESIGN Appendix B9).
+
+## Mutation testing
+
+mutmut planted 2,907 small bugs, one at a time, in the four files that make the judgment calls, and ran the test
+suite against each one. It ran the 170 tests of 3b6b0d1; these four files have changed since by one docstring line,
+and the tests added since mostly cover the app and the write path.
+
+| File | Planted | Caught | Score |
+|---|---:|---:|---:|
+| `normalize.py` | 117 | 90 | 77% |
+| `rules.py` | 273 | 170 | 62% |
+| `match.py` | 271 | 228 | 84% |
+| `propose.py` | 2,246 | 1,296 | 58% |
+| **All four** | **2,907** | **1,784** | **61%** |
+
+What the survivors show: the tests pin the verdicts (which card, which band, which survivor, the billing route and
+the end state of every account) but mostly not the wording of card titles, reasons and evidence. That wording
+accounts for about 700 of the 950 survivors in `propose.py`. They also leave defaults for missing CRM fields
+untested, because every saved account has every field, and only test the money rules' exact boundaries (revenue
+or AR of exactly $1) through one group of accounts. 26 survivors change nothing observable. A set of tests that
+catches the rest was written alongside this run but is not in the repo: most of it pins today's card wording in
+a golden file, which should be read and judged before it becomes the standard.
 
 ## impeccable audit
 
