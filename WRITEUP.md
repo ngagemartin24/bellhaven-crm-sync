@@ -95,8 +95,8 @@ The first real approvals showed one thing the fake CRM had hidden: the real CRM 
 record's id, so every update read as unconfirmed. The writes had all landed; the app now confirms an update by
 reading the record back. I made the first two decisions in the app myself (Marietta and Kettering). The other
 40 follow the answer key above: a browser script clicked them through the app's own Approve and Reject buttons
-on my instruction, and History records each one. The demo video was recorded the same way, with captions
-rather than my voice. This runs on my own agent setup, which keeps the decisions, reviews and test runs on
+on my instruction, and History records each one. The demo video was recorded the same way and narrated with an
+ElevenLabs clone of my own voice. This runs on my own agent setup, which keeps the decisions, reviews and test runs on
 record.
 
 ## What I'd build next
