@@ -44,6 +44,7 @@ class FakeCrm:
         self._rejected: set[str] = set()
         self._counter = 0
         self._clock: str | None = None
+        self._terse: str | None = None  # None: an update answers with the record; "id": with its id only
 
     @classmethod
     def from_snapshot(cls, snapshot_dir: Path) -> "FakeCrm":
@@ -52,6 +53,11 @@ class FakeCrm:
         return cls(accounts, contacts)
 
     # ---- switches for tests -----------------------------------------------------------------
+    def terse_updates(self, applies: bool = True) -> None:
+        """Answer every update with the record's id only, as the real CRM does (seen 2026-11-08).
+        applies=False also leaves the record unchanged: an update the CRM accepted but did not store."""
+        self._terse = "id" if applies else "id-unapplied"
+
     def fail_next(self, method: str, status: int, message: str, after: int = 0) -> None:
         self._faults.append(
             {"method": method, "kind": "fail", "skip": after, "status": status, "message": message}
@@ -165,7 +171,12 @@ class FakeCrm:
             self._refresh(rec)
             return rec
 
-        return self._write("PATCH", f"/accounts/{account_id}", body, ACCOUNT_DEFAULTS, do)
+        if self._terse == "id-unapplied":
+            self._fire("PATCH")
+            self._check(body, ACCOUNT_DEFAULTS)
+            return {"id": account_id}
+        result = self._write("PATCH", f"/accounts/{account_id}", body, ACCOUNT_DEFAULTS, do)
+        return {"id": account_id} if self._terse else result
 
     def patch_contact(self, contact_id: str, body: dict) -> dict:
         if contact_id not in self.contacts:
@@ -179,7 +190,12 @@ class FakeCrm:
             rec["updated_at"] = self._now()
             return rec
 
-        return self._write("PATCH", f"/contacts/{contact_id}", body, CONTACT_DEFAULTS, do)
+        if self._terse == "id-unapplied":
+            self._fire("PATCH")
+            self._check(body, CONTACT_DEFAULTS)
+            return {"id": contact_id}
+        result = self._write("PATCH", f"/contacts/{contact_id}", body, CONTACT_DEFAULTS, do)
+        return {"id": contact_id} if self._terse else result
 
     def create_account(self, body: dict) -> dict:
         def do():

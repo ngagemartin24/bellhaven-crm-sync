@@ -290,10 +290,19 @@ def _patch(step: Step, op_id: int, ledger: Ledger, crm, created: dict[int, str],
     ledger.step_intent(op_id, step.n, "PATCH", step.path, body, {k: rec.get(k) for k in body}, step.expect)
     kind, rid = _target(step)
     response = crm.patch_account(rid, body) if kind == "accounts" else crm.patch_contact(rid, body)
-    missing = [k for k, v in body.items() if not _same(response.get(k), v)]
+    stored = response if isinstance(response, dict) else {}
+    missing = [k for k, v in body.items() if not _same(stored.get(k), v)]
+    if missing:
+        # the real CRM answers an update with the record's id only: confirm from a fresh read
+        try:
+            stored = _read(crm, step)
+        except (CrmError, requests.RequestException) as e:
+            why = e.message if isinstance(e, CrmError) else type(e).__name__
+            raise CrmError(0, f"the CRM accepted the update but reading it back failed: {why}") from e
+        missing = [k for k, v in body.items() if not _same(stored.get(k), v)]
     if missing:
         raise CrmError(0, f"the CRM did not confirm {', '.join(missing)}")
-    ledger.step_done(op_id, step.n, 200, {k: response.get(k) for k in body}, None)
+    ledger.step_done(op_id, step.n, 200, {k: stored.get(k) for k in body}, None)
 
 
 def _post(step: Step, op_id: int, ledger: Ledger, crm, created: dict[int, str], m: int) -> None:

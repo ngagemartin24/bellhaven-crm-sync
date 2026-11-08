@@ -160,3 +160,34 @@ def test_note_line_appended_once_and_earlier_note_kept(tmp_path):
     assert approve(c.id, c.version, l, crm).status == "done"
     note = crm.get_account(full_id("9MB6KL"))["note"]
     assert note.startswith("Called 10/2\n[Bellhaven sync") and note.count("[Bellhaven sync") == 1
+
+
+# 2026-11-08, live run: the real CRM answers an update without echoing the fields it stored, so every
+# update was reported "may have landed" and each Retry advanced one write. Confirm by reading back.
+def test_terse_update_reply_is_confirmed_by_reading_back(tmp_path):
+    l, crm = ready(tmp_path)
+    crm.terse_updates()
+    c = chow_card(l, "bellhaven-of-tiffin")  # create, contact, then one update on the old account
+    r = approve(c.id, c.version, l, crm)
+    assert (r.status, r.done, r.total) == ("done", 3, 3), r.message
+    d = details_card(l, "NRLNME")
+    assert approve(d.id, d.version, l, crm).status == "done"
+
+
+def test_terse_reply_and_unchanged_record_stays_uncertain(tmp_path):
+    l, crm = ready(tmp_path)
+    crm.terse_updates(applies=False)
+    d = details_card(l, "NRLNME")
+    r = approve(d.id, d.version, l, crm)
+    assert r.status == "failed" and "may have landed" in r.message and "did not confirm" in r.message
+
+
+def test_read_back_error_after_an_accepted_update_is_uncertain(tmp_path):
+    l, crm = ready(tmp_path)
+    crm.terse_updates()
+    d = details_card(l, "NRLNME")
+    # reads: one in the pre-check pass, one inside the step, then the read-back fails
+    crm.fail_next("GET", 404, "not found", after=2)
+    r = approve(d.id, d.version, l, crm)
+    assert r.status == "failed" and "may have landed" in r.message, r.message
+    assert retry(d.id, l, crm).status == "done"
