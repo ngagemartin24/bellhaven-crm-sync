@@ -12,6 +12,14 @@ contacts to 127 and 73. Afterwards `scripts/verify.py` against the real CRM prin
 expected end state (127 accounts and 73 contacts checked)`, and a second run read 35 of 35 locations and 127
 accounts and proposed 0 changes. [WRITEUP.md](WRITEUP.md) lists every judgment call behind those changes.
 
+The two real runs, as recorded in the app's decision file (`decisions.db`, table `runs`):
+
+```
+run  started (UTC)     website read            CRM accounts  new  refreshed  superseded  blocked
+1    2026-11-08 13:41  complete, 35 of 35      121           42   0          0           0
+2    2026-11-08 15:43  complete, 35 of 35      127           0    0          0           0
+```
+
 ## Quick start
 
 ```sh
