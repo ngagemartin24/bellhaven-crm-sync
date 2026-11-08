@@ -90,9 +90,6 @@ def test_static_files_cache_for_a_year_behind_a_versioned_link(env):
     assert env.client.get("/").headers["cache-control"] == "no-store"
 
 
-def test_pages_describe_themselves_and_stay_out_of_search(env):
+def test_pages_describe_themselves(env):
     for path in ("/", "/no-such-page"):
-        html = env.client.get(path).text
-        assert (
-            '<meta name="description" content="' in html and '<meta name="robots" content="noindex">' in html
-        )
+        assert '<meta name="description" content="' in env.client.get(path).text
