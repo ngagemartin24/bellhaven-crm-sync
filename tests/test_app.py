@@ -76,3 +76,19 @@ def test_crm_link_carries_the_account(env):
     c = env.pending("details", account="NRLNME")
     html = env.client.get(f"/?card={c.id}").text
     assert f"http://crm.invalid/crm/test-token/accounts/{c.account_ids[0]}" in html
+
+
+@pytest.mark.parametrize("path", ["/", "/locations", "/history"])
+def test_every_page_declares_its_tab_icon(env, path):
+    # Without one, the browser asks for /favicon.ico, gets a 404 and logs a console error (Lighthouse).
+    page = env.client.get(path).text
+    assert '<link rel="icon"' in page
+
+
+def test_queue_link_name_contains_its_visible_text(env):
+    # WCAG 2.5.3 Label in Name: on narrow screens the rail shows "Queue" and the count, so the
+    # accessible name must contain both, in that order.
+    page = env.client.get("/").text
+    link = page[page.index('<a href="/" title="Review queue') : page.index("</a>", page.index('<a href="/" title="Review queue'))]
+    assert 'aria-label="Queue, 42 to decide"' in link
+    assert link.index('class="rail-label">Queue<') < link.index('class="count num">42<')
