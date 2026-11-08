@@ -106,7 +106,7 @@ h1 { margin: 0; font-size: var(--fs-title); line-height: 32px; font-weight: 600;
 .pill.warn { background: var(--pill-warning-bg); color: var(--pill-warning-ink); }
 
 /* the open proposal */
-.item { padding: var(--card-pad) var(--pad) 0; min-width: 0; }
+.item { position: relative; padding: var(--card-pad) var(--pad) 0; min-width: 0; } /* contains screen-reader-only text */
 .item-head { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .tags { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 6px 0 0; color: var(--muted); font-size: var(--fs-small); }
 .item h2 { margin: 0; font-size: 20px; line-height: 28px; font-weight: 600; letter-spacing: -0.01em; }
@@ -137,7 +137,7 @@ p.note span { color: var(--hue); }
 .changes .note span { color: var(--hue); }
 .compare td.same { color: var(--muted); }
 .compare td.differs { color: var(--text); font-weight: 500; }
-.scroller { overflow-x: auto; }
+.scroller { position: relative; overflow-x: auto; }
 .scroller:focus-visible { outline-offset: 4px; }
 
 /* the billing rule: two figures and the route they force */
@@ -222,7 +222,7 @@ td .line2 { white-space: normal; }
 @media (min-width: 961px) {
   main:has(> .workspace) { height: 100vh; display: flex; flex-direction: column; padding-bottom: 20px; }
   main:has(> .workspace) > .workspace { flex: 1; min-height: 0; align-items: stretch; }
-  .workspace > .list { position: static; max-height: none; height: 100%; }
+  .workspace > .list { position: relative; max-height: none; height: 100%; }
   .workspace > .item { height: 100%; overflow: auto; }
 }
 

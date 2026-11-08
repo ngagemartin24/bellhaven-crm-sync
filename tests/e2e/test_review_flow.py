@@ -77,6 +77,13 @@ def test_approve_reject_rerun(page, live_app):
     SHOTS.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=SHOTS / "queue-change-of-ownership.png")
 
+    # on a desktop window the queue fills the window exactly: the panes scroll, the page never does
+    # (2026-11-08: screen-reader-only labels positioned against the page stretched it 500px)
+    for card in (tiffin, only(live_app.ledger.cards("pending"), kind="duplicates", slug="bellhaven-of-kettering")):
+        page.goto(f"{live_app.url}/?card={card.id}#card-{card.id}")
+        size = page.evaluate("() => [document.scrollingElement.scrollHeight, innerHeight, scrollY]")
+        assert size[0] == size[1] and size[2] == 0, f"page taller than the window: {size}"
+
     # approve the Grove City rename: one write lands in the CRM
     page.locator(f"#card-{rename.id} a").click()
     expect(page.locator("#item-title")).to_have_text(rename.title)
