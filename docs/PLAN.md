@@ -54,7 +54,7 @@ tests/e2e/test_review_flow.py
 README.md  WRITEUP.md  docs/{DESIGN,PLAN,code-tour,cheat-sheet,api-notes}.md
 ```
 
-Fixture sources (copy, do not edit): `~/.fleet/bellhaven-assessment/data/site-index/*.html` → `site/`,
+Fixture sources (copy, do not edit): `the saved snapshot (outside the repo) data/site-index/*.html` → `site/`,
 `data/site-pages/*.html` → `site/communities/`, `data/crm-accounts-initial.json` → `crm-accounts.json`,
 `data/crm-contacts-initial.json` → `crm-contacts.json`. Both JSON files keep the API's envelope
 `{"data": [...], "page", "page_size", "total"}`.
@@ -1121,7 +1121,7 @@ No new product code; fixes from this task go in the files they concern.
 
 - [ ] **Step 1:** Cross-model code review: GPT-6-Astra (`codex exec -m gpt-6-astra -c model_reasoning_effort=high -s read-only`) over the whole repo at the exact head, graded against DESIGN §2's SC-1…SC-8 and this plan's Review Focus. Record the verdict in `docs/review/`. Fix every FAIL; re-review the changed lines.
 - [ ] **Step 2:** Secret and code scans: `gitleaks detect --source .`, `trivy fs --scanners secret,misconfig .`, `semgrep --config=p/python src scripts`. Expected: no secret; no high finding. Confirm `git log -p | grep -c bh_` returns 0.
-- [ ] **Step 3:** Prose checks on README.md: `typos README.md docs/`, `harper-cli lint README.md`, the estate `humanizer-lint`. Fix findings.
+- [ ] **Step 3:** Prose checks on README.md: `typos README.md docs/`, `harper-cli lint README.md`, `humanizer-lint` (an AI-phrasing checker). Fix findings.
 - [ ] **Step 4:** Run the full suite once: `uv run pytest -q && uv run pytest -m e2e -q`. Expected: PASS.
 - [ ] **Step 5: Commit** `chore: review fixes and pre-publication checks`.
 
@@ -1131,9 +1131,9 @@ No new product code; fixes from this task go in the files they concern.
 
 These are not code tasks; they are listed so nothing is missed.
 
-1. Seat: `bellhaven-sync run` against the real CRM (read-only); `blind_check.py prepare`; a fresh Astra session answers `PROMPT.md` without the design; `blind_check.py compare`; Fable second opinion on Sandusky, Kettering, Owosso, Alliance, Coldwater; evaluator pair probabilities (development only).
-2. Gage: off-camera first writes (Grove City rename; Batavia new account); seat writes `docs/api-notes.md` from what they show.
+1. Claude Code: `bellhaven-sync run` against the real CRM (read-only); `blind_check.py prepare`; a fresh Astra session answers `PROMPT.md` without the design; `blind_check.py compare`; Fable second opinion on Sandusky, Kettering, Owosso, Alliance, Coldwater; evaluator pair probabilities (development only).
+2. Gage: off-camera first writes (Grove City rename; Batavia new account); Claude Code writes `docs/api-notes.md` from what they show.
 3. Gage: record the video with Cap (DESIGN §18 run-sheet), then click the remaining cards, flagged ones first.
-4. Seat: `scripts/verify.py` and a second `bellhaven-sync run` (must propose zero); both outputs into WRITEUP.md.
-5. Seat drafts, Gage edits: WRITEUP.md and the ~250–300-word form text; `docs/code-tour.md`, `docs/cheat-sheet.md`.
+4. Claude Code: `scripts/verify.py` and a second `bellhaven-sync run` (must propose zero); both outputs into WRITEUP.md.
+5. Claude Code drafts, Gage edits: WRITEUP.md and the ~250–300-word form text; `docs/code-tour.md`, `docs/cheat-sheet.md`.
 6. Gage: make the repo public, upload the video unlisted, submit the form before 2026-11-09T19:30Z; mock walkthrough before the interview.
